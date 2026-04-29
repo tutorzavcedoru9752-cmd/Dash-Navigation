@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "build:client": "vite build",
     "build": "vite build && esbuild server.ts --platform=node --packages=external --bundle --outfile=dist/server.cjs",
     "preview": "vite preview",
     "start": "node dist/server.cjs",
