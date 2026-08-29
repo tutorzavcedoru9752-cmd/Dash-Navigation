@@ -72,10 +72,23 @@ const AUTH_LABELS = {
     password: 'Password',
     signIn: 'Sign in',
     signUp: 'Create account',
+    verifyCode: 'Verify email',
+    verificationCode: 'Verification code',
+    verificationCodePlaceholder: '6-digit code',
+    resendCode: 'Resend code',
+    forgotPassword: 'Forgot password?',
+    sendResetLink: 'Send reset email',
+    resetPassword: 'Reset password',
+    newPassword: 'New password',
+    savePassword: 'Save new password',
+    backToSignIn: 'Back to sign in',
     switchToSignUp: 'Need an account?',
     switchToSignIn: 'Already have an account?',
     loading: 'Loading your private navigation...',
-    success: 'Check your email for the verification code if confirmation is required, then sign in.',
+    success: 'Check your email for the verification code.',
+    verified: 'Email verified. You can sign in with your password now.',
+    resetSent: 'If this email exists, a password reset message has been sent.',
+    passwordUpdated: 'Password updated. Please sign in again.',
   },
   zh: {
     title: 'Dash-Navigation',
@@ -84,12 +97,27 @@ const AUTH_LABELS = {
     password: '密码',
     signIn: '登录',
     signUp: '创建账号',
+    verifyCode: '验证邮箱',
+    verificationCode: '验证码',
+    verificationCodePlaceholder: '6 位验证码',
+    resendCode: '重新发送验证码',
+    forgotPassword: '忘记密码？',
+    sendResetLink: '发送重置邮件',
+    resetPassword: '重置密码',
+    newPassword: '新密码',
+    savePassword: '保存新密码',
+    backToSignIn: '返回登录',
     switchToSignUp: '还没有账号？',
     switchToSignIn: '已有账号？',
     loading: '正在加载你的私人导航...',
-    success: '如果开启了邮箱确认，请查收邮箱验证码，然后再登录。',
+    success: '请查收邮箱验证码。',
+    verified: '邮箱已验证，现在可以使用邮箱和密码登录。',
+    resetSent: '如果该邮箱存在，密码重置邮件已发送。',
+    passwordUpdated: '密码已更新，请重新登录。',
   },
 };
+
+type AuthMode = 'sign-in' | 'sign-up' | 'verify-sign-up' | 'forgot-password';
 
 function getFallbackName(session: Session | null) {
   return session?.user.email?.split('@')[0] || 'User';
@@ -308,15 +336,31 @@ function NavBar() {
   );
 }
 
-function AuthScreen() {
+function AuthScreen({ notice }: { notice?: string }) {
   const { lang } = useContext(LangContext);
   const t = AUTH_LABELS[lang];
-  const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [mode, setMode] = useState<AuthMode>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [message, setMessage] = useState(notice ?? '');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const redirectTo = typeof window !== 'undefined' ? window.location.origin : 'https://dash-navigation.vercel.app';
+
+  useEffect(() => {
+    setMessage(notice ?? '');
+  }, [notice]);
+
+  const switchMode = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setError('');
+    setMessage('');
+    if (nextMode !== 'verify-sign-up') {
+      setVerificationCode('');
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -324,18 +368,89 @@ function AuthScreen() {
     setMessage('');
     setError('');
 
-    const authCall = mode === 'sign-in'
-      ? supabase.auth.signInWithPassword({ email, password })
-      : supabase.auth.signUp({ email, password });
-
-    const { error: authError } = await authCall;
-    if (authError) {
-      setError(authError.message);
-    } else if (mode === 'sign-up') {
-      setMessage(t.success);
+    if (mode === 'sign-in') {
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError) setError(authError.message);
     }
+
+    if (mode === 'sign-up') {
+      const { error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectTo,
+        },
+      });
+
+      if (authError) {
+        setError(authError.message);
+      } else {
+        setMode('verify-sign-up');
+        setMessage(t.success);
+      }
+    }
+
+    if (mode === 'verify-sign-up') {
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token: verificationCode.trim(),
+        type: 'email',
+      });
+
+      if (verifyError) {
+        setError(verifyError.message);
+      } else {
+        setMode('sign-in');
+        setPassword('');
+        setVerificationCode('');
+        setMessage(t.verified);
+      }
+    }
+
+    if (mode === 'forgot-password') {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
+
+      if (resetError) {
+        setError(resetError.message);
+      } else {
+        setMessage(t.resetSent);
+      }
+    }
+
     setSubmitting(false);
   };
+
+  const handleResendCode = async () => {
+    if (!email || submitting) return;
+    setSubmitting(true);
+    setError('');
+    setMessage('');
+
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: redirectTo,
+      },
+    });
+
+    if (resendError) {
+      setError(resendError.message);
+    } else {
+      setMessage(t.success);
+    }
+
+    setSubmitting(false);
+  };
+
+  const primaryButtonLabel = {
+    'sign-in': t.signIn,
+    'sign-up': t.signUp,
+    'verify-sign-up': t.verifyCode,
+    'forgot-password': t.sendResetLink,
+  }[mode];
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 px-6 py-10 transition-colors duration-200 dark:from-zinc-950 dark:to-zinc-900">
@@ -367,13 +482,166 @@ function AuthScreen() {
             </span>
           </label>
 
+          {(mode === 'sign-in' || mode === 'sign-up') && (
+            <label className="block">
+              <span className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{t.password}</span>
+              <input
+                type="password"
+                required
+                minLength={6}
+                autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-sm text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
+              />
+            </label>
+          )}
+
+          {mode === 'verify-sign-up' && (
+            <label className="block">
+              <span className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{t.verificationCode}</span>
+              <input
+                type="text"
+                required
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                minLength={6}
+                maxLength={6}
+                value={verificationCode}
+                onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder={t.verificationCodePlaceholder}
+                className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-center font-mono text-lg tracking-[0.35em] text-gray-900 outline-none ring-1 ring-transparent transition placeholder:text-sm placeholder:tracking-normal focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
+              />
+            </label>
+          )}
+
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
+          {message && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">{message}</p>}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white dark:focus-visible:ring-zinc-600"
+          >
+            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            {primaryButtonLabel}
+          </button>
+        </form>
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          {mode === 'sign-in' && (
+            <>
+              <button
+                type="button"
+                onClick={() => switchMode('sign-up')}
+                className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+              >
+                {t.switchToSignUp}
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode('forgot-password')}
+                className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+              >
+                {t.forgotPassword}
+              </button>
+            </>
+          )}
+          {mode === 'sign-up' && (
+            <button
+              type="button"
+              onClick={() => switchMode('sign-in')}
+              className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+            >
+              {t.switchToSignIn}
+            </button>
+          )}
+          {mode === 'verify-sign-up' && (
+            <>
+              <button
+                type="button"
+                onClick={handleResendCode}
+                disabled={submitting || !email}
+                className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+              >
+                {t.resendCode}
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode('sign-in')}
+                className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+              >
+                {t.backToSignIn}
+              </button>
+            </>
+          )}
+          {mode === 'forgot-password' && (
+            <button
+              type="button"
+              onClick={() => switchMode('sign-in')}
+              className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+            >
+              {t.backToSignIn}
+            </button>
+          )}
+        </div>
+
+        <div className="mt-5 flex justify-end">
+          <ModeControls />
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function PasswordResetScreen({ onDone }: { onDone: (notice: string) => void }) {
+  const { lang } = useContext(LangContext);
+  const t = AUTH_LABELS[lang];
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setMessage('');
+    setError('');
+
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    if (updateError) {
+      setError(updateError.message);
+      setSubmitting(false);
+      return;
+    }
+
+    setMessage(t.passwordUpdated);
+    await supabase.auth.signOut();
+    onDone(t.passwordUpdated);
+    setSubmitting(false);
+  };
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 px-6 py-10 transition-colors duration-200 dark:from-zinc-950 dark:to-zinc-900">
+      <section className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mb-8 flex items-start gap-4">
+          <div className="mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950">
+            <Lock className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="whitespace-nowrap text-xl font-semibold text-gray-900 dark:text-gray-100 sm:text-2xl">{t.resetPassword}</h1>
+            <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{t.subtitle}</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block">
-            <span className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{t.password}</span>
+            <span className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{t.newPassword}</span>
             <input
               type="password"
               required
               minLength={6}
-              autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
+              autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-sm text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
@@ -389,22 +657,11 @@ function AuthScreen() {
             className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white dark:focus-visible:ring-zinc-600"
           >
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            {mode === 'sign-in' ? t.signIn : t.signUp}
+            {t.savePassword}
           </button>
         </form>
 
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
-              setError('');
-              setMessage('');
-            }}
-            className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-          >
-            {mode === 'sign-in' ? t.switchToSignUp : t.switchToSignIn}
-          </button>
+        <div className="mt-5 flex justify-end">
           <ModeControls />
         </div>
       </section>
@@ -437,6 +694,8 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [authNotice, setAuthNotice] = useState('');
 
   const setLang = (l: Lang) => {
     setLangState(l);
@@ -516,11 +775,24 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
-      await ensureProfile(data.session);
+      if (!passwordRecovery) {
+        await ensureProfile(data.session);
+      }
       setAuthLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true);
+        setSession(nextSession);
+        setAuthLoading(false);
+        return;
+      }
+
+      if (event === 'SIGNED_OUT') {
+        setPasswordRecovery(false);
+      }
+
       setSession(nextSession);
       void ensureProfile(nextSession);
       setAuthLoading(false);
@@ -535,8 +807,13 @@ export default function App() {
         <AuthContext.Provider value={{ session, profile, updateProfile }}>
           {authLoading ? (
             <LoadingScreen />
+          ) : passwordRecovery ? (
+            <PasswordResetScreen onDone={(notice) => {
+              setPasswordRecovery(false);
+              setAuthNotice(notice);
+            }} />
           ) : !session ? (
-            <AuthScreen />
+            <AuthScreen notice={authNotice} />
           ) : (
             <BrowserRouter>
               <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-zinc-900 flex flex-col transition-colors duration-200">
