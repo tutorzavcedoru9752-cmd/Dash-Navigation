@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline": "#75777b",
+                        "secondary-container": "#d8e1ea",
+                        "inverse-primary": "#c3c7cc",
+                        "inverse-on-surface": "#f0f1f2",
+                        "error-container": "#ffdad6",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-secondary-fixed": "#141d23",
+                        "on-surface-variant": "#44474a",
+                        "surface-container-lowest": "#ffffff",
+                        "on-background": "#191c1d",
+                        "tertiary-fixed-dim": "#d2c4bb",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-container": "#5b646b",
+                        "surface-dim": "#d9dadb",
+                        "primary-container": "#212529",
+                        "secondary-fixed-dim": "#bfc8d0",
+                        "primary-fixed-dim": "#c3c7cc",
+                        "error": "#ba1a1a",
+                        "surface-bright": "#f8f9fa",
+                        "on-tertiary-fixed-variant": "#4f453e",
+                        "surface-container-high": "#e7e8e9",
+                        "on-surface": "#191c1d",
+                        "surface-container-low": "#f3f4f5",
+                        "secondary": "#575f67",
+                        "on-primary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "primary-fixed": "#e0e3e8",
+                        "tertiary-fixed": "#efe0d6",
+                        "surface": "#f8f9fa",
+                        "on-tertiary": "#ffffff",
+                        "tertiary-container": "#2b231d",
+                        "on-primary-fixed": "#181c20",
+                        "inverse-surface": "#2e3132",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed-variant": "#43474c",
+                        "surface-container": "#edeeef",
+                        "on-secondary-fixed-variant": "#3f484f",
+                        "background": "#f8f9fa",
+                        "secondary-fixed": "#dbe4ed",
+                        "on-tertiary-fixed": "#221a14",
+                        "primary": "#0c1014",
+                        "tertiary": "#150e09",
+                        "on-primary-container": "#888c91",
+                        "surface-tint": "#5b5f63",
+                        "on-tertiary-container": "#968981",
+                        "surface-variant": "#e1e3e4",
+                        "outline-variant": "#c5c6ca"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "grid-gutter": "1.5rem",
+                        "container-max-width": "1200px",
+                        "section-gap": "3rem",
+                        "card-padding": "1.25rem",
+                        "search-max-width": "600px"
+                    },
+                    "fontFamily": {
+                        "display": ["Inter"],
+                        "label-xs": ["Inter"],
+                        "h2": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "h1": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display": ["2.5rem", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-xs": ["0.75rem", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "h2": ["1.125rem", {"lineHeight": "1.4", "letterSpacing": "0em", "fontWeight": "600"}],
+                        "body-md": ["1rem", {"lineHeight": "1.5", "letterSpacing": "0em", "fontWeight": "400"}],
+                        "body-lg": ["1.125rem", {"lineHeight": "1.6", "letterSpacing": "0em", "fontWeight": "400"}],
+                        "label-sm": ["0.875rem", {"lineHeight": "1.2", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                        "h1": ["1.5rem", {"lineHeight": "1.4", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .card-shadow { box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .card-hover:hover { 
+            box-shadow: 0 10px 15px rgba(0,0,0,0.1);
+            transform: scale(1.02);
+        }
+        .bg-gradient-soft {
+            background: linear-gradient(180deg, #f8f9fa 0%, #f1f3f5 100%);
+        }
+    </style>
+</head>
+<body class="bg-gradient-soft min-h-screen font-body-md text-on-surface">
+<nav class="bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md text-zinc-900 dark:text-zinc-50 font-sans antialiased text-sm font-medium docked full-width top-0 sticky z-50 border-b border-zinc-100 dark:border-zinc-800 shadow-sm">
+<div class="flex justify-between items-center px-6 py-4 max-w-[1200px] mx-auto w-full">
+<div class="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Dash</div>
+<div class="hidden md:flex items-center space-gap-8 gap-8">
+<a class="text-zinc-900 dark:text-zinc-50 border-b-2 border-zinc-900 dark:border-zinc-50 pb-1" href="#">Home</a>
+<a class="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors" href="#">Categories</a>
+<a class="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors" href="#">Collections</a>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-zinc-600 cursor-pointer hover:bg-zinc-50 p-2 rounded-full transition-all">settings</span>
+<span class="material-symbols-outlined text-zinc-600 cursor-pointer hover:bg-zinc-50 p-2 rounded-full transition-all">account_circle</span>
+</div>
+</div>
+</nav>
+<main class="max-w-[1200px] mx-auto px-6 py-12 flex flex-col items-center">
+<div class="w-full max-w-[600px] mb-16 flex flex-col items-center">
+<div class="flex items-center gap-3 mb-6 text-[#212529] font-light"><span class="text-sm">2024年10月24日 星期四</span>
+<span class="text-sm">北京</span>
+<i class="w-4 h-4 text-[#212529]" data-lucide="sun"></i>
+<span class="text-sm">22°C</span>
+<span class="text-sm">晴朗</span>
+</div>
+<form action="https://www.google.com/search" class="relative group w-full" method="GET">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant transition-colors group-focus-within:text-primary">search</span>
+<input class="w-full pl-12 pr-4 py-4 bg-surface-container-lowest border border-outline-variant rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all card-shadow font-body-lg" name="q" placeholder="Search with Google..." type="text"/>
+</form>
+</div>
+<section class="w-full space-y-12">
+<div class="space-y-6">
+<div class="flex items-center gap-3 border-b border-surface-container-highest pb-3">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">book_2</span>
+<h2 class="font-h2 text-h2 text-on-surface">Learning</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+<a class="bg-surface-container-lowest p-5 rounded-lg card-shadow card-hover transition-all duration-200 flex items-center gap-4 border border-transparent hover:border-surface-variant" href="https://www.cnki.net">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined">library_books</span>
+</div>
+<div>
+<p class="font-h2 text-on-surface">知网</p>
+<p class="text-label-xs text-on-surface-variant">Academic Repository</p>
+</div>
+</a>
+<a class="bg-surface-container-lowest p-5 rounded-lg card-shadow card-hover transition-all duration-200 flex items-center gap-4 border border-transparent hover:border-surface-variant" href="https://scholar.google.com">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined">school</span>
+</div>
+<div>
+<p class="font-h2 text-on-surface">Google Scholar</p>
+<p class="text-label-xs text-on-surface-variant">Research Search</p>
+</div>
+</a>
+<a class="bg-surface-container-lowest p-5 rounded-lg card-shadow card-hover transition-all duration-200 flex items-center gap-4 border border-transparent hover:border-surface-variant" href="https://www.researchgate.net">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined">biotech</span>
+</div>
+<div>
+<p class="font-h2 text-on-surface">ResearchGate</p>
+<p class="text-label-xs text-on-surface-variant">Scientific Network</p>
+</div>
+</a>
+</div>
+</div>
+<div class="space-y-6">
+<div class="flex items-center gap-3 border-b border-surface-container-highest pb-3">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<h2 class="font-h2 text-h2 text-on-surface">AI Assistant</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+<a class="bg-surface-container-lowest p-5 rounded-lg card-shadow card-hover transition-all duration-200 flex items-center gap-4 border border-transparent hover:border-surface-variant" href="https://www.deepseek.com">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed">
+<span class="material-symbols-outlined">psychology</span>
+</div>
+<div>
+<p class="font-h2 text-on-surface">DeepSeek</p>
+<p class="text-label-xs text-on-surface-variant">Deep Learning Model</p>
+</div>
+</a>
+<a class="bg-surface-container-lowest p-5 rounded-lg card-shadow card-hover transition-all duration-200 flex items-center gap-4 border border-transparent hover:border-surface-variant" href="https://gemini.google.com">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed">
+<span class="material-symbols-outlined">relax</span>
+</div>
+<div>
+<p class="font-h2 text-on-surface">Gemini</p>
+<p class="text-label-xs text-on-surface-variant">Multimodal AI</p>
+</div>
+</a>
+<a class="bg-surface-container-lowest p-5 rounded-lg card-shadow card-hover transition-all duration-200 flex items-center gap-4 border border-transparent hover:border-surface-variant" href="https://chat.openai.com">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed">
+<span class="material-symbols-outlined">robot_2</span>
+</div>
+<div>
+<p class="font-h2 text-on-surface">ChatGPT</p>
+<p class="text-label-xs text-on-surface-variant">OpenAI Assistant</p>
+</div>
+</a>
+</div>
+</div>
+<div class="space-y-6">
+<div class="flex items-center gap-3 border-b border-surface-container-highest pb-3">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">play_circle</span>
+<h2 class="font-h2 text-h2 text-on-surface">Entertainment</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+<a class="bg-surface-container-lowest p-5 rounded-lg card-shadow card-hover transition-all duration-200 flex items-center gap-4 border border-transparent hover:border-surface-variant" href="https://www.zhihu.com">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed">
+<span class="material-symbols-outlined">quiz</span>
+</div>
+<div>
+<p class="font-h2 text-on-surface">知乎</p>
+<p class="text-label-xs text-on-surface-variant">Q&amp;A Community</p>
+</div>
+</a>
+<a class="bg-surface-container-lowest p-5 rounded-lg card-shadow card-hover transition-all duration-200 flex items-center gap-4 border border-transparent hover:border-surface-variant" href="https://www.xiaohongshu.com">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed">
+<span class="material-symbols-outlined">style</span>
+</div>
+<div>
+<p class="font-h2 text-on-surface">小红书</p>
+<p class="text-label-xs text-on-surface-variant">Lifestyle Sharing</p>
+</div>
+</a>
+<a class="bg-surface-container-lowest p-5 rounded-lg card-shadow card-hover transition-all duration-200 flex items-center gap-4 border border-transparent hover:border-surface-variant" href="https://www.bilibili.com">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed">
+<span class="material-symbols-outlined">movie</span>
+</div>
+<div>
+<p class="font-h2 text-on-surface">Bilibili</p>
+<p class="text-label-xs text-on-surface-variant">Video Content</p>
+</div>
+</a>
+</div>
+</div>
+<div class="mt-12 rounded-2xl overflow-hidden relative h-[300px] flex items-center justify-center">
+<div class="absolute inset-0 z-0">
+<img class="w-full h-full object-cover brightness-50" data-alt="Modern minimalist workspace with warm ambient lighting, laptop on wooden desk, and a clean organized atmosphere for productivity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxgWKnOF7KAG4tLjtvhFnpbo90x1vy8oB66OmNkTWKBZ52iaOeqanwhlqOROj3_vjUiy8FMfRc8qPlt-E78E3xicgdIc7BiRLanpwEIxbMsVpN4l55qUDGHU7iF3xnfVsscnfEGEuq1q_cG3grZvx5k1KzboQCTlZ1dCagmg6EGzww9v7XH0devnKPQv5VQ90ZpmcnWOgH16qcvTZUGLctQlFSx6oUdGyU_MDBUHynTeDSqgtVqBmlseyWX4rxyk2dSdLKAj2VcUw"/>
+</div>
+<div class="relative z-10 text-center space-y-4 px-6">
+<h1 class="font-display text-display text-white">Focus on what matters.</h1>
+<p class="font-body-lg text-white/80 max-w-lg mx-auto">Your digital launchpad for a focused and organized day across the web.</p>
+</div>
+</div>
+</section>
+</main>
+<footer class="bg-zinc-50 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 font-sans text-xs uppercase tracking-widest full-width mt-auto border-t border-zinc-100 dark:border-zinc-800">
+<div class="flex flex-col md:flex-row justify-between items-center px-8 py-12 max-w-[1200px] mx-auto w-full space-y-4 md:space-y-0">
+<p>© 2024 Minimalist Dash. Designed for focus.</p>
+<div class="flex items-center gap-8">
+<a class="text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors" href="#">Documentation</a>
+<a class="text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors" href="#">GitHub</a>
+<a class="text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors" href="#">Privacy Policy</a>
+</div>
+</div>
+</footer>
+<script>
+        lucide.createIcons();
+
+        const navigationData = [
+            {
+                category: "Learning",
+                icon: "library_books",
+                items: [
+                    { name: "知网", url: "https://www.cnki.net", desc: "Academic Repository" },
+                    { name: "Google Scholar", url: "https://scholar.google.com", desc: "Research Search" },
+                    { name: "ResearchGate", url: "https://www.researchgate.net", desc: "Scientific Network" }
+                ]
+            },
+            {
+                category: "AI Assistant",
+                icon: "psychology",
+                items: [
+                    { name: "DeepSeek", url: "https://www.deepseek.com", desc: "Deep Learning Model" },
+                    { name: "Gemini", url: "https://gemini.google.com", desc: "Multimodal AI" },
+                    { name: "ChatGPT", url: "https://chat.openai.com", desc: "OpenAI Assistant" }
+                ]
+            },
+            {
+                category: "Entertainment",
+                icon: "play_circle",
+                items: [
+                    { name: "知乎", url: "https://www.zhihu.com", desc: "Q&A Community" },
+                    { name: "小红书", url: "https://www.xiaohongshu.com", desc: "Lifestyle Sharing" },
+                    { name: "Bilibili", url: "https://www.bilibili.com", desc: "Video Content" }
+                ]
+            }
+        ];
+    </script>
+</body></html>
