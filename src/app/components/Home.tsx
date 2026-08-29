@@ -31,15 +31,18 @@ const iconMap: Record<string, React.ReactNode> = {
   'flight': <Plane className="w-5 h-5" />,
   'directions_car': <Car className="w-5 h-5" />,
   'fitness_center': <Dumbbell className="w-5 h-5" />,
+  'mail': <Mail className="w-5 h-5" />,
 };
 
 const categoryIconMap: Record<string, React.ReactNode> = {
   'Email': <Mail className="w-5 h-5" />,
+  '邮箱': <Mail className="w-5 h-5" />,
   '邮件': <Mail className="w-5 h-5" />,
   'Learning': <GraduationCap className="w-5 h-5" />,
   'AI Tools': <BrainCircuit className="w-5 h-5" />,
   'AI Assistant': <BrainCircuit className="w-5 h-5" />,
   'Entertainment': <Video className="w-5 h-5" />,
+  '娱乐': <Video className="w-5 h-5" />,
   'Tools': <Settings className="w-5 h-5" />,
   'Productivity': <Settings className="w-5 h-5" />,
   'Development': <Code className="w-5 h-5" />,
@@ -611,13 +614,13 @@ export default function Home() {
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={`bg-white dark:bg-zinc-800 p-5 rounded-lg shadow-sm border hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex items-center gap-4 ${
+                        className={`bg-white dark:bg-zinc-800 p-3.5 rounded-lg shadow-sm border hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex items-center gap-3 ${
                           highlightedSiteId === item.id
-                            ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-300 dark:ring-blue-600 shadow-blue-100 dark:shadow-blue-900/20'
+                            ? 'border-blue-400 ring-2 ring-blue-300 shadow-blue-100 dark:border-sky-300 dark:bg-sky-400/10 dark:ring-sky-400/35 dark:shadow-sky-950/30'
                             : 'border-transparent dark:border-zinc-700 hover:border-gray-300 dark:hover:border-gray-600'
                         }`}
                       >
-                        <div className="w-12 h-12 rounded-lg bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 flex items-center justify-center flex-shrink-0 overflow-hidden p-2">
+                        <div className="w-10 h-10 rounded-lg bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 flex items-center justify-center flex-shrink-0 overflow-hidden p-2">
                           {item.faviconUrl ? (
                             <img src={item.faviconUrl} alt={`${item.name} favicon`} className="w-full h-full object-contain" />
                           ) : (
@@ -625,7 +628,7 @@ export default function Home() {
                           )}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-gray-900 dark:text-gray-100 truncate" title={item.name}>{item.name}</p>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate" title={item.name}>{item.name}</p>
                           <p className="text-xs text-gray-500 dark:text-gray-400 tracking-wide truncate" title={item.description}>{item.description}</p>
                         </div>
                       </motion.a>

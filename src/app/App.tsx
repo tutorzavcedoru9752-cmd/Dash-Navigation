@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router';
-import { Camera, ChevronDown, Languages, Loader2, Lock, LogOut, Mail, Moon, Save, Sun, UserRound } from 'lucide-react';
+import { ChevronDown, Languages, Loader2, Lock, LogOut, Mail, Moon, Sun, UserRound } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import Home from './components/Home';
 import Categories from './components/Categories';
@@ -36,7 +36,6 @@ type UserProfile = {
 
 type ProfilePatch = {
   display_name: string;
-  avatar_url: string | null;
 };
 
 // ─── Nav labels ───────────────────────────────────────────────────────────────
@@ -50,9 +49,6 @@ const ACCOUNT_LABELS = {
   en: {
     account: 'Account',
     displayName: 'Display name',
-    avatarUrl: 'Avatar URL',
-    avatarPlaceholder: 'https://example.com/avatar.png',
-    save: 'Save',
     saving: 'Saving...',
     saved: 'Saved',
     signOut: 'Sign out',
@@ -61,9 +57,6 @@ const ACCOUNT_LABELS = {
   zh: {
     account: '账号',
     displayName: '用户名',
-    avatarUrl: '头像链接',
-    avatarPlaceholder: 'https://example.com/avatar.png',
-    save: '保存',
     saving: '保存中...',
     saved: '已保存',
     signOut: '退出账号',
@@ -74,7 +67,7 @@ const ACCOUNT_LABELS = {
 const AUTH_LABELS = {
   en: {
     title: 'Dash-Navigation',
-    subtitle: 'Sign in to keep every navigation collection private to its owner.',
+    subtitle: '定制和分享你的浏览器导航页',
     email: 'Email',
     password: 'Password',
     signIn: 'Sign in',
@@ -82,11 +75,11 @@ const AUTH_LABELS = {
     switchToSignUp: 'Need an account?',
     switchToSignIn: 'Already have an account?',
     loading: 'Loading your private navigation...',
-    success: 'Check your email if confirmation is required, then sign in.',
+    success: 'Check your email for the verification code if confirmation is required, then sign in.',
   },
   zh: {
     title: 'Dash-Navigation',
-    subtitle: '登录后，每个人只能看到和管理自己的网址导航。',
+    subtitle: '定制和分享你的浏览器导航页',
     email: '邮箱',
     password: '密码',
     signIn: '登录',
@@ -94,7 +87,7 @@ const AUTH_LABELS = {
     switchToSignUp: '还没有账号？',
     switchToSignIn: '已有账号？',
     loading: '正在加载你的私人导航...',
-    success: '如果开启了邮箱确认，请先查收邮件，然后再登录。',
+    success: '如果开启了邮箱确认，请查收邮箱验证码，然后再登录。',
   },
 };
 
@@ -102,24 +95,18 @@ function getFallbackName(session: Session | null) {
   return session?.user.email?.split('@')[0] || 'User';
 }
 
-function getInitials(name: string) {
-  const trimmed = name.trim();
-  if (!trimmed) return 'U';
-  return trimmed.slice(0, 2).toUpperCase();
-}
-
 function ModeControls() {
   const { lang, setLang } = useContext(LangContext);
   const { isDark, toggleDark } = useContext(ThemeContext);
 
   return (
-    <div className="fixed bottom-5 right-5 z-40 flex items-center gap-2">
+    <div className="flex items-center gap-2">
       <button
         type="button"
         onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
         title={lang === 'en' ? '切换为中文' : 'Switch to English'}
         aria-label={lang === 'en' ? 'Switch to Chinese' : '切换为英文'}
-        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:ring-zinc-600"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:ring-zinc-600"
       >
         <Languages className="h-4.5 w-4.5" />
       </button>
@@ -128,7 +115,7 @@ function ModeControls() {
         onClick={toggleDark}
         title={isDark ? (lang === 'en' ? 'Light mode' : '浅色模式') : (lang === 'en' ? 'Dark mode' : '深色模式')}
         aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:ring-zinc-600"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:ring-zinc-600"
       >
         {isDark ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
       </button>
@@ -198,7 +185,6 @@ function NavBar() {
   const { session, profile, updateProfile } = useContext(AuthContext);
   const [accountOpen, setAccountOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
   const [profileStatus, setProfileStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const accountRef = useRef<HTMLDivElement>(null);
 
@@ -207,12 +193,10 @@ function NavBar() {
   const accountLabels = ACCOUNT_LABELS[lang];
   const email = session?.user.email ?? '';
   const name = profile?.display_name || getFallbackName(session);
-  const avatar = profile?.avatar_url || '';
 
   useEffect(() => {
     setDisplayName(name);
-    setAvatarUrl(avatar);
-  }, [name, avatar]);
+  }, [name]);
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
@@ -224,12 +208,13 @@ function NavBar() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const handleSaveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleProfileBlur = async () => {
+    const nextName = displayName.trim() || getFallbackName(session);
+    if (nextName === name || profileStatus === 'saving') return;
+
     setProfileStatus('saving');
     const result = await updateProfile({
-      display_name: displayName.trim() || getFallbackName(session),
-      avatar_url: avatarUrl.trim() || null,
+      display_name: nextName,
     });
     setProfileStatus(result.error ? 'error' : 'saved');
     if (!result.error) {
@@ -240,7 +225,7 @@ function NavBar() {
   return (
     <nav className="sticky top-0 z-50 bg-white/80 dark:bg-zinc-900/85 backdrop-blur-md border-b border-gray-200 dark:border-zinc-800 shadow-sm transition-colors duration-200">
       <div className="max-w-[1200px] mx-auto px-6 lg:px-20 py-4 flex justify-between items-center">
-        <div className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-xl">Dash-Navigation</div>
+        <div className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-xl">Dash</div>
         <div className="flex items-center gap-4 md:gap-8">
           <div className="flex items-baseline gap-4 md:gap-8">
             <NavDropdown />
@@ -271,57 +256,39 @@ function NavBar() {
               onClick={() => setAccountOpen((open) => !open)}
               title={email || accountLabels.account}
               aria-label={accountLabels.account}
-              className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.03] hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white dark:focus-visible:ring-zinc-600"
+              className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white shadow-sm transition hover:scale-[1.03] hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white dark:focus-visible:ring-zinc-600"
             >
-              {avatar ? (
-                <img src={avatar} alt="" className="h-full w-full object-cover" />
-              ) : (
-                getInitials(name)
-              )}
+              <UserRound className="h-4 w-4" />
             </button>
             {accountOpen && (
               <div className="absolute right-0 top-full mt-3 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
                 <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-950">
-                    {avatarUrl.trim() ? (
-                      <img src={avatarUrl.trim()} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <UserRound className="h-5 w-5" />
-                    )}
+                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950">
+                    <UserRound className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{name}</p>
                     <p className="truncate text-xs text-gray-500 dark:text-gray-400">{email}</p>
                   </div>
                 </div>
-                <form onSubmit={handleSaveProfile} className="space-y-3">
+                <div className="space-y-3">
                   <label className="block">
                     <span className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{accountLabels.displayName}</span>
                     <input
                       value={displayName}
                       onChange={(event) => setDisplayName(event.target.value)}
+                      onBlur={handleProfileBlur}
                       className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-sm text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
                     />
                   </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{accountLabels.avatarUrl}</span>
-                    <span className="mt-1.5 flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2.5 ring-1 ring-transparent focus-within:ring-gray-300 dark:bg-zinc-800 dark:focus-within:ring-zinc-600">
-                      <Camera className="h-4 w-4 text-gray-400" />
-                      <input
-                        type="url"
-                        value={avatarUrl}
-                        onChange={(event) => setAvatarUrl(event.target.value)}
-                        placeholder={accountLabels.avatarPlaceholder}
-                        className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-gray-100"
-                      />
-                    </span>
-                  </label>
+                  {profileStatus === 'saving' && <p className="text-xs text-gray-500 dark:text-gray-400">{accountLabels.saving}</p>}
+                  {profileStatus === 'saved' && <p className="text-xs text-green-600 dark:text-green-400">{accountLabels.saved}</p>}
                   {profileStatus === 'error' && (
                     <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
                       {accountLabels.profileError}
                     </p>
                   )}
-                  <div className="flex items-center justify-between gap-3 pt-1">
+                  <div className="flex items-center justify-end gap-3 pt-1">
                     <button
                       type="button"
                       onClick={() => supabase.auth.signOut()}
@@ -330,16 +297,8 @@ function NavBar() {
                       <LogOut className="h-3.5 w-3.5" />
                       {accountLabels.signOut}
                     </button>
-                    <button
-                      type="submit"
-                      disabled={profileStatus === 'saving'}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white dark:focus-visible:ring-zinc-600"
-                    >
-                      {profileStatus === 'saving' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                      {profileStatus === 'saving' ? accountLabels.saving : profileStatus === 'saved' ? accountLabels.saved : accountLabels.save}
-                    </button>
                   </div>
-                </form>
+                </div>
               </div>
             )}
           </div>
@@ -386,7 +345,7 @@ function AuthScreen() {
             <Lock className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{t.title}</h1>
+            <h1 className="whitespace-nowrap text-xl font-semibold text-gray-900 dark:text-gray-100 sm:text-2xl">{t.title}</h1>
             <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{t.subtitle}</p>
           </div>
         </div>
@@ -434,19 +393,21 @@ function AuthScreen() {
           </button>
         </form>
 
-        <button
-          type="button"
-          onClick={() => {
-            setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
-            setError('');
-            setMessage('');
-          }}
-          className="mt-5 text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-        >
-          {mode === 'sign-in' ? t.switchToSignUp : t.switchToSignIn}
-        </button>
+        <div className="mt-5 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
+              setError('');
+              setMessage('');
+            }}
+            className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+          >
+            {mode === 'sign-in' ? t.switchToSignUp : t.switchToSignIn}
+          </button>
+          <ModeControls />
+        </div>
       </section>
-      <ModeControls />
     </main>
   );
 }
@@ -537,7 +498,6 @@ export default function App() {
       .from('profiles')
       .update({
         display_name: patch.display_name,
-        avatar_url: patch.avatar_url,
         updated_at: new Date().toISOString(),
       })
       .eq('id', session.user.id)

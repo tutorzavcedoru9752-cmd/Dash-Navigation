@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, useRef } from 'react';
-import { BookOpen, Sparkles, PlayCircle, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, RefreshCw, Languages, Sun, Moon, Mail } from 'lucide-react';
-import { fetchFaviconData, useCategories, type LinkItem } from '../hooks/useCategories';
+import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, RefreshCw, Languages, Sun, Moon, Mail, Share2, Download, Check, KeyRound, Clock3 } from 'lucide-react';
+import { fetchFaviconData, useCategories, type LinkItem, type NavShare } from '../hooks/useCategories';
 import { motion } from 'motion/react';
 import { LangContext, ThemeContext } from '../App';
 
@@ -23,6 +23,7 @@ const ui = {
     categoryIdPlaceholder: 'e.g., productivity',
     categoryTitle: 'Category Title',
     categoryTitlePlaceholder: 'e.g., Productivity',
+    category: 'Category',
     description: 'Description',
     descriptionPlaceholder: 'Brief description of the category',
     cancel: 'Cancel',
@@ -42,6 +43,26 @@ const ui = {
     toastCreated: 'Created',
     toastRefreshed: 'Icons refreshed',
     toastReordered: 'Saved',
+    importLinks: 'Import links',
+    shareCategoryLabel: 'Share category links',
+    shareCategory: 'Share Category',
+    shareHint: 'Select sites from this category and create a share code that expires in 3 days.',
+    shareCode: 'Share Code',
+    shareExpires: 'Expires',
+    generateCode: 'Generate Code',
+    selectAtLeastOne: 'Select at least one site',
+    loadShareCode: 'Load share code',
+    importShare: 'Import Shared Links',
+    shareCodePlaceholder: 'Enter share code',
+    importTo: 'Import to',
+    existingCategory: 'Existing category',
+    newCategory: 'New category',
+    importSelected: 'Import selected',
+    noShareFound: 'No valid share code found.',
+    toastShareCreated: 'Share code created',
+    toastShareCopied: 'Share code copied',
+    toastShareLoaded: 'Share loaded',
+    toastImported: 'Links imported',
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
     docs: 'Documentation',
@@ -66,6 +87,7 @@ const ui = {
     categoryIdPlaceholder: '例如：productivity',
     categoryTitle: '分类名称',
     categoryTitlePlaceholder: '例如：效率工具',
+    category: '分类',
     description: '描述',
     descriptionPlaceholder: '分类的简短描述',
     cancel: '取消',
@@ -85,6 +107,26 @@ const ui = {
     toastCreated: '已创建',
     toastRefreshed: '图标已刷新',
     toastReordered: '已保存',
+    importLinks: '导入网址',
+    shareCategoryLabel: '分享分类网址',
+    shareCategory: '分享分类',
+    shareHint: '选择这个分类下的网址，生成一个 3 天后过期的分享码。',
+    shareCode: '分享码',
+    shareExpires: '有效期至',
+    generateCode: '生成分享码',
+    selectAtLeastOne: '请至少选择一个网站',
+    loadShareCode: '读取分享码',
+    importShare: '导入分享的网址',
+    shareCodePlaceholder: '输入分享码',
+    importTo: '导入到',
+    existingCategory: '已有分类',
+    newCategory: '新建分类',
+    importSelected: '导入选中网址',
+    noShareFound: '没有找到有效的分享码。',
+    toastShareCreated: '分享码已生成',
+    toastShareCopied: '分享码已复制',
+    toastShareLoaded: '分享内容已读取',
+    toastImported: '网址已导入',
     privacy: '隐私政策',
     terms: '服务条款',
     docs: '文档',
@@ -95,11 +137,13 @@ const ui = {
 
 const categoryIconMap: Record<string, React.ReactNode> = {
   'Email': <Mail className="w-5 h-5" />,
+  '邮箱': <Mail className="w-5 h-5" />,
   '邮件': <Mail className="w-5 h-5" />,
   'Learning': <GraduationCap className="w-5 h-5" />,
   'AI Tools': <BrainCircuit className="w-5 h-5" />,
   'AI Assistant': <BrainCircuit className="w-5 h-5" />,
   'Entertainment': <Video className="w-5 h-5" />,
+  '娱乐': <Video className="w-5 h-5" />,
   'Tools': <Settings className="w-5 h-5" />,
   'Productivity': <Settings className="w-5 h-5" />,
   'Development': <Code className="w-5 h-5" />,
@@ -146,6 +190,7 @@ const itemIconMap: Record<string, React.ReactNode> = {
   'quiz': <MessageSquare className="w-6 h-6" />,
   'style': <Bookmark className="w-6 h-6" />,
   'movie': <Video className="w-6 h-6" />,
+  'mail': <Mail className="w-6 h-6" />,
   'link': <Link className="w-6 h-6" />,
   'code': <Code className="w-6 h-6" />,
   'terminal': <Terminal className="w-6 h-6" />,
@@ -169,20 +214,78 @@ export default function Categories() {
   const { lang, setLang } = useContext(LangContext);
   const { isDark, toggleDark } = useContext(ThemeContext);
   const t = ui[lang];
-  const { categories, loading, addItem, updateItem, deleteItem, deleteCategory, createCategory, migrateFavicons } = useCategories();
+  const {
+    categories,
+    loading,
+    addItem,
+    updateItem,
+    deleteItem,
+    deleteCategory,
+    createCategory,
+    createShare,
+    getShare,
+    importSharedLinks,
+    migrateFavicons,
+  } = useCategories();
 
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
-  const [editingItem, setEditingItem] = useState<{ id: string; name: string; url: string; description: string } | null>(null);
+  const [editingItem, setEditingItem] = useState<{ id: string; name: string; url: string; description: string; categoryId: string } | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [editingCategory, setEditingCategory] = useState<{ id: string; title: string; description: string } | null>(null);
-  const [formData, setFormData] = useState({ name: '', url: '', description: '' });
+  const [formData, setFormData] = useState({ name: '', url: '', description: '', categoryId: '' });
   const [categoryFormData, setCategoryFormData] = useState({ id: '', title: '', description: '' });
   const [isRefreshingFavicons, setIsRefreshingFavicons] = useState(false);
   const [toast, setToast] = useState<{ status: 'saving' | 'done'; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [isSharingCategory, setIsSharingCategory] = useState(false);
+  const [shareSelectedIds, setShareSelectedIds] = useState<Set<string>>(new Set());
+  const [shareResult, setShareResult] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [isImportingShare, setIsImportingShare] = useState(false);
+  const [importCode, setImportCode] = useState('');
+  const [loadedShare, setLoadedShare] = useState<NavShare | null>(null);
+  const [importSelectedIds, setImportSelectedIds] = useState<Set<string>>(new Set());
+  const [importTargetMode, setImportTargetMode] = useState<'existing' | 'new'>('existing');
+  const [importCategoryId, setImportCategoryId] = useState('');
+  const [importNewCategory, setImportNewCategory] = useState({ id: '', title: '', description: '' });
   const selectedCategory = categories.find(c => c.id === selectedCategoryId);
+
+  const hostnameFor = (url: string) => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
+  };
+
+  const createCategoryIdFromTitle = (title: string) => {
+    const base = title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || `shared-${Date.now().toString(36)}`;
+    let nextId = base;
+    let suffix = 2;
+
+    while (categories.some((category) => category.id === nextId)) {
+      nextId = `${base}-${suffix}`;
+      suffix += 1;
+    }
+
+    return nextId;
+  };
+
+  const toggleSetValue = (set: Set<string>, id: string) => {
+    const next = new Set(set);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    return next;
+  };
 
   const startToast = (msg: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -198,7 +301,10 @@ export default function Categories() {
     if (categories.length > 0 && !selectedCategoryId) {
       setSelectedCategoryId(categories[0].id);
     }
-  }, [categories, selectedCategoryId]);
+    if (categories.length > 0 && !importCategoryId) {
+      setImportCategoryId(categories[0].id);
+    }
+  }, [categories, selectedCategoryId, importCategoryId]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -211,7 +317,9 @@ export default function Categories() {
   }, []);
 
   const handleAddItem = async () => {
-    if (!formData.name || !formData.url || !selectedCategory) return;
+    const targetCategoryId = formData.categoryId || selectedCategoryId;
+    const targetCategory = categories.find((category) => category.id === targetCategoryId);
+    if (!formData.name || !formData.url || !targetCategory) return;
     const iconOptions = [
       'book', 'school', 'biotech', 'psychology', 'relax', 'robot_2',
       'quiz', 'style', 'movie', 'link', 'code', 'terminal', 'cloud',
@@ -222,30 +330,34 @@ export default function Categories() {
     const randomIcon = iconOptions[Math.floor(Math.random() * iconOptions.length)];
     startToast(t.toastSaving);
     const faviconUrl = await fetchFaviconData(formData.url);
-    await addItem(selectedCategoryId, {
+    await addItem(targetCategoryId, {
       name: formData.name,
       url: formData.url,
       description: formData.description,
       icon: randomIcon,
       faviconUrl,
     });
-    setFormData({ name: '', url: '', description: '' });
+    setSelectedCategoryId(targetCategoryId);
+    setFormData({ name: '', url: '', description: '', categoryId: targetCategoryId });
     setIsAddingNew(false);
     finishToast(t.toastAdded);
   };
 
   const handleEditItem = async () => {
     if (!editingItem || !formData.name || !formData.url) return;
+    const targetCategoryId = formData.categoryId || editingItem.categoryId;
     startToast(t.toastSaving);
     const faviconUrl = await fetchFaviconData(formData.url);
-    await updateItem(selectedCategoryId, editingItem.id, {
+    await updateItem(editingItem.categoryId, editingItem.id, {
       name: formData.name,
       url: formData.url,
       description: formData.description,
       faviconUrl,
+      categoryId: targetCategoryId,
     });
     setEditingItem(null);
-    setFormData({ name: '', url: '', description: '' });
+    setSelectedCategoryId(targetCategoryId);
+    setFormData({ name: '', url: '', description: '', categoryId: targetCategoryId });
     finishToast(t.toastUpdated);
   };
 
@@ -268,21 +380,21 @@ export default function Categories() {
   };
 
   const startEdit = (item: LinkItem) => {
-    setEditingItem(item);
-    setFormData({ name: item.name, url: item.url, description: item.description });
+    setEditingItem({ ...item, categoryId: selectedCategoryId });
+    setFormData({ name: item.name, url: item.url, description: item.description, categoryId: selectedCategoryId });
     setIsAddingNew(false);
   };
 
   const startAddNew = () => {
     setIsAddingNew(true);
     setEditingItem(null);
-    setFormData({ name: '', url: '', description: '' });
+    setFormData({ name: '', url: '', description: '', categoryId: selectedCategoryId });
   };
 
   const cancelEdit = () => {
     setEditingItem(null);
     setIsAddingNew(false);
-    setFormData({ name: '', url: '', description: '' });
+    setFormData({ name: '', url: '', description: '', categoryId: selectedCategoryId });
   };
 
   const handleCreateCategory = async () => {
@@ -352,6 +464,98 @@ export default function Categories() {
     await migrateFavicons();
     setIsRefreshingFavicons(false);
     finishToast(t.toastRefreshed);
+  };
+
+  const openShareModal = () => {
+    if (!selectedCategory) return;
+    setShareSelectedIds(new Set(selectedCategory.items.map((item) => item.id)));
+    setShareResult(null);
+    setIsSharingCategory(true);
+  };
+
+  const handleCreateShareCode = async () => {
+    if (!selectedCategory || shareSelectedIds.size === 0) return;
+    setIsGeneratingShare(true);
+    startToast(t.toastSaving);
+    const result = await createShare(selectedCategory, Array.from(shareSelectedIds));
+    setIsGeneratingShare(false);
+
+    if (result) {
+      setShareResult(result);
+      finishToast(t.toastShareCreated);
+    } else {
+      finishToast(t.selectAtLeastOne);
+    }
+  };
+
+  const handleCopyShareCode = async () => {
+    if (!shareResult) return;
+    try {
+      await navigator.clipboard.writeText(shareResult.code);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = shareResult.code;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    finishToast(t.toastShareCopied);
+  };
+
+  const openImportModal = () => {
+    setImportCode('');
+    setLoadedShare(null);
+    setImportSelectedIds(new Set());
+    setImportTargetMode('existing');
+    setImportCategoryId(selectedCategoryId || categories[0]?.id || '');
+    setImportNewCategory({ id: '', title: '', description: '' });
+    setIsImportingShare(true);
+  };
+
+  const handleLoadShareCode = async () => {
+    const share = await getShare(importCode);
+    if (!share) {
+      finishToast(t.noShareFound);
+      return;
+    }
+
+    setLoadedShare(share);
+    setImportSelectedIds(new Set(share.links.map((item) => item.id)));
+    setImportNewCategory({
+      id: createCategoryIdFromTitle(share.categoryTitle),
+      title: share.categoryTitle,
+      description: share.categoryDescription,
+    });
+    finishToast(t.toastShareLoaded);
+  };
+
+  const handleImportSharedLinks = async () => {
+    if (!loadedShare || importSelectedIds.size === 0) return;
+
+    let targetCategoryId = importCategoryId;
+    if (importTargetMode === 'new') {
+      const title = importNewCategory.title.trim() || loadedShare.categoryTitle;
+      targetCategoryId = importNewCategory.id.trim() || createCategoryIdFromTitle(title);
+      const created = await createCategory({
+        id: targetCategoryId,
+        title,
+        description: importNewCategory.description,
+        order: categories.length,
+      });
+      if (!created) return;
+    }
+
+    const links = loadedShare.links.filter((item) => importSelectedIds.has(item.id));
+    startToast(t.toastSaving);
+    const imported = await importSharedLinks(targetCategoryId, links);
+    if (imported) {
+      setSelectedCategoryId(targetCategoryId);
+      setIsImportingShare(false);
+      finishToast(t.toastImported);
+    }
   };
 
   const handleDeleteCategoryFromList = async (categoryId: string) => {
@@ -489,6 +693,13 @@ export default function Categories() {
               <RefreshCw className={`w-4 h-4 ${isRefreshingFavicons ? 'animate-spin' : ''}`} />
               <span>{isRefreshingFavicons ? t.refreshing : t.refreshIcons}</span>
             </button>
+            <button
+              onClick={openImportModal}
+              className="w-full flex items-center justify-center gap-2 py-2 px-4 mt-2 bg-gray-100 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-zinc-600 transition-all text-sm font-medium"
+            >
+              <Download className="w-4 h-4" />
+              <span>{t.importLinks}</span>
+            </button>
           </div>
         </motion.aside>
 
@@ -512,8 +723,16 @@ export default function Categories() {
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={openShareModal}
+                disabled={!selectedCategory || selectedCategory.items.length === 0}
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-300 dark:hover:bg-zinc-800"
+                title={t.shareCategoryLabel}
+              >
+                <Share2 className="w-5 h-5" />
+              </button>
+              <button
                 onClick={() => selectedCategory && startEditCategory(selectedCategory)}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-300 dark:hover:bg-zinc-800"
                 title={t.editCategoryLabel}
               >
                 <Edit2 className="w-5 h-5" />
@@ -828,6 +1047,20 @@ export default function Categories() {
               </div>
             </div>
             <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.category}</label>
+              <select
+                value={formData.categoryId || selectedCategoryId}
+                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
+              >
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-500 uppercase px-1 tracking-wide">{t.description}</label>
               <textarea
                 className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
@@ -855,6 +1088,305 @@ export default function Categories() {
               </button>
             </div>
           </form>
+        </motion.div>
+      </div>
+    )}
+
+    {/* Share Category Modal */}
+    {isSharingCategory && selectedCategory && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setIsSharingCategory(false)}
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ type: "spring", duration: 0.3 }}
+          onClick={(e) => e.stopPropagation()}
+          className="relative bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        >
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-900 dark:bg-zinc-700 dark:text-gray-100">
+                <Share2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.shareCategory}</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t.shareHint}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsSharingCategory(false)}
+              className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-zinc-700 dark:hover:text-gray-100"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {selectedCategory.items.map((item) => {
+              const selected = shareSelectedIds.has(item.id);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setShareSelectedIds((current) => toggleSetValue(current, item.id))}
+                  className={`flex min-h-[88px] items-center gap-3 rounded-lg border p-3 text-left transition ${
+                    selected
+                      ? 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
+                      : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500'
+                  }`}
+                >
+                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
+                    {item.faviconUrl ? (
+                      <img src={item.faviconUrl} alt="" className="h-full w-full object-contain" />
+                    ) : (
+                      itemIconMap[item.icon] || <BookOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
+                    <p className="truncate text-xs text-gray-500 dark:text-gray-400">{hostnameFor(item.url)}</p>
+                  </div>
+                  <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${
+                    selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-gray-300 dark:border-zinc-500'
+                  }`}>
+                    {selected && <Check className="h-3 w-3" />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {shareResult && (
+            <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/70">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.shareCode}</p>
+                  <p className="mt-1 font-mono text-2xl font-semibold tracking-widest text-gray-900 dark:text-gray-100">{shareResult.code}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyShareCode}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white transition hover:bg-gray-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {t.copyLink}
+                </button>
+              </div>
+              <p className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <Clock3 className="h-3.5 w-3.5" />
+                {t.shareExpires}: {new Date(shareResult.expiresAt).toLocaleString()}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsSharingCategory(false)}
+              className="px-5 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+            >
+              <X className="w-4 h-4" />
+              {t.cancel}
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateShareCode}
+              disabled={shareSelectedIds.size === 0 || isGeneratingShare}
+              className="px-5 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white hover:opacity-90 transition-opacity flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-950"
+            >
+              {isGeneratingShare ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+              {shareSelectedIds.size === 0 ? t.selectAtLeastOne : t.generateCode}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    )}
+
+    {/* Import Shared Links Modal */}
+    {isImportingShare && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setIsImportingShare(false)}
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ type: "spring", duration: 0.3 }}
+          onClick={(e) => e.stopPropagation()}
+          className="relative bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        >
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-900 dark:bg-zinc-700 dark:text-gray-100">
+                <Download className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.importShare}</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t.loadShareCode}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsImportingShare(false)}
+              className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-zinc-700 dark:hover:text-gray-100"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              value={importCode}
+              onChange={(e) => setImportCode(e.target.value.toUpperCase())}
+              placeholder={t.shareCodePlaceholder}
+              className="min-w-0 flex-1 rounded-lg bg-gray-100 px-3 py-2.5 font-mono text-sm tracking-widest text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+            />
+            <button
+              type="button"
+              onClick={handleLoadShareCode}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white"
+            >
+              <KeyRound className="h-4 w-4" />
+              {t.loadShareCode}
+            </button>
+          </div>
+
+          {loadedShare && (
+            <div className="mt-5 space-y-5">
+              <div className="flex flex-col gap-1 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/70">
+                <p className="font-semibold text-gray-900 dark:text-gray-100">{loadedShare.categoryTitle}</p>
+                {loadedShare.categoryDescription && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{loadedShare.categoryDescription}</p>
+                )}
+                <p className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  {t.shareExpires}: {new Date(loadedShare.expiresAt).toLocaleString()}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {loadedShare.links.map((item) => {
+                  const selected = importSelectedIds.has(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setImportSelectedIds((current) => toggleSetValue(current, item.id))}
+                      className={`flex min-h-[88px] items-center gap-3 rounded-lg border p-3 text-left transition ${
+                        selected
+                          ? 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
+                          : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500'
+                      }`}
+                    >
+                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
+                        {item.faviconUrl ? (
+                          <img src={item.faviconUrl} alt="" className="h-full w-full object-contain" />
+                        ) : (
+                          itemIconMap[item.icon] || <BookOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
+                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">{hostnameFor(item.url)}</p>
+                      </div>
+                      <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${
+                        selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-gray-300 dark:border-zinc-500'
+                      }`}>
+                        {selected && <Check className="h-3 w-3" />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.importTo}</p>
+                <div className="flex gap-2">
+                  {(['existing', 'new'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setImportTargetMode(mode)}
+                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                        importTargetMode === mode
+                          ? 'bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600'
+                      }`}
+                    >
+                      {mode === 'existing' ? t.existingCategory : t.newCategory}
+                    </button>
+                  ))}
+                </div>
+
+                {importTargetMode === 'existing' ? (
+                  <select
+                    value={importCategoryId}
+                    onChange={(e) => setImportCategoryId(e.target.value)}
+                    className="w-full rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                  >
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>{category.title}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <input
+                      value={importNewCategory.id}
+                      onChange={(e) => setImportNewCategory({ ...importNewCategory, id: e.target.value })}
+                      placeholder={t.categoryIdPlaceholder}
+                      className="rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                    />
+                    <input
+                      value={importNewCategory.title}
+                      onChange={(e) => setImportNewCategory({ ...importNewCategory, title: e.target.value })}
+                      placeholder={t.categoryTitlePlaceholder}
+                      className="rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                    />
+                    <textarea
+                      value={importNewCategory.description}
+                      onChange={(e) => setImportNewCategory({ ...importNewCategory, description: e.target.value })}
+                      placeholder={t.descriptionPlaceholder}
+                      rows={2}
+                      className="rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 md:col-span-2 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsImportingShare(false)}
+              className="px-5 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+            >
+              <X className="w-4 h-4" />
+              {t.cancel}
+            </button>
+            <button
+              type="button"
+              onClick={handleImportSharedLinks}
+              disabled={!loadedShare || importSelectedIds.size === 0}
+              className="px-5 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white hover:opacity-90 transition-opacity flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-950"
+            >
+              <Download className="w-4 h-4" />
+              {t.importSelected}
+            </button>
+          </div>
         </motion.div>
       </div>
     )}

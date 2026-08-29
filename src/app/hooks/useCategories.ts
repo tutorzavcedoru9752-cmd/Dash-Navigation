@@ -19,6 +19,14 @@ export interface Category {
   order?: number;
 }
 
+export interface NavShare {
+  code: string;
+  categoryTitle: string;
+  categoryDescription: string;
+  links: LinkItem[];
+  expiresAt: string;
+}
+
 type NavCategoryRow = {
   id: string;
   title: string;
@@ -41,47 +49,47 @@ type DefaultCategorySeed = {
   id: string;
   title: string;
   description: string;
-  icon: string;
   items: Array<Omit<LinkItem, 'id' | 'faviconUrl'> & { id: string }>;
 };
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-e5a5bd76`;
+const DEFAULT_SEED_VERSION = 2;
 
 const DEFAULT_CATEGORY_SEEDS: DefaultCategorySeed[] = [
   {
     id: 'ai-tools',
     title: 'AI Tools',
-    description: 'Common AI assistants and research tools.',
-    icon: 'robot_2',
+    description: '常用 AI 助手与内容创作工具。',
     items: [
-      { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com', description: 'AI assistant for writing, coding and ideation.', icon: 'robot_2' },
-      { id: 'perplexity', name: 'Perplexity', url: 'https://www.perplexity.ai', description: 'AI search and answer engine.', icon: 'quiz' },
-      { id: 'claude', name: 'Claude', url: 'https://claude.ai', description: 'AI assistant for long-form work.', icon: 'psychology' },
+      { id: 'chat-gpt', name: 'Chat GPT', url: 'https://chatgpt.com', description: 'AI assistant for writing, coding and ideation.', icon: 'robot_2' },
+      { id: 'doubao', name: '豆包', url: 'https://www.doubao.com', description: '字节跳动推出的 AI 助手。', icon: 'psychology' },
+      { id: 'deepseek', name: 'Deepseek', url: 'https://chat.deepseek.com', description: '深度求索 AI 助手。', icon: 'psychology' },
     ],
   },
   {
-    id: 'design',
-    title: 'Design',
-    description: 'Design, inspiration and visual workflow links.',
-    icon: 'palette',
+    id: 'entertainment',
+    title: '娱乐',
+    description: '内容社区、问答与视频平台。',
     items: [
-      { id: 'figma', name: 'Figma', url: 'https://www.figma.com', description: 'Collaborative interface design tool.', icon: 'palette' },
-      { id: 'dribbble', name: 'Dribbble', url: 'https://dribbble.com', description: 'Design inspiration and portfolios.', icon: 'style' },
-      { id: 'unsplash', name: 'Unsplash', url: 'https://unsplash.com', description: 'Free high-quality photography.', icon: 'photo_camera' },
+      { id: 'xiaohongshu', name: '小红书', url: 'https://www.xiaohongshu.com', description: '生活方式与内容社区。', icon: 'style' },
+      { id: 'zhihu', name: '知乎', url: 'https://www.zhihu.com', description: '中文问答与知识社区。', icon: 'quiz' },
+      { id: 'bilibili', name: '哔哩哔哩', url: 'https://www.bilibili.com', description: '视频、番剧与创作社区。', icon: 'movie' },
     ],
   },
   {
-    id: 'productivity',
-    title: 'Productivity',
-    description: 'Everyday notes, storage and development tools.',
-    icon: 'settings',
+    id: 'email',
+    title: '邮箱',
+    description: '常用邮箱入口。',
     items: [
-      { id: 'notion', name: 'Notion', url: 'https://www.notion.so', description: 'Workspace for notes, tasks and knowledge.', icon: 'book' },
-      { id: 'github', name: 'GitHub', url: 'https://github.com', description: 'Code hosting and collaboration.', icon: 'code' },
-      { id: 'google-drive', name: 'Google Drive', url: 'https://drive.google.com', description: 'Cloud files and shared documents.', icon: 'cloud' },
+      { id: 'qq-mail', name: 'QQ邮箱', url: 'https://mail.qq.com', description: '腾讯 QQ 邮箱。', icon: 'mail' },
+      { id: '163-mail', name: '163邮箱', url: 'https://mail.163.com', description: '网易 163 邮箱。', icon: 'mail' },
+      { id: 'gmail', name: 'Gmail', url: 'https://mail.google.com', description: 'Google 邮箱服务。', icon: 'mail' },
     ],
   },
 ];
+
+const LEGACY_SEED_CATEGORY_IDS = ['ai-tools', 'design', 'productivity'];
+const LEGACY_SEED_LINK_IDS = ['chatgpt', 'perplexity', 'claude', 'figma', 'dribbble', 'unsplash', 'notion', 'github', 'google-drive'];
 
 const getCurrentUserId = async () => {
   const { data, error } = await supabase.auth.getUser();
@@ -97,6 +105,27 @@ const createId = () => {
 };
 
 const faviconUrlFor = (url: string) => `https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(url)}`;
+
+const createShareCode = () => {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+};
+
+const normalizeShareCode = (code: string) => code.trim().toUpperCase().replace(/\s+/g, '');
+
+const isLegacyDefaultSeed = (categories: NavCategoryRow[], links: NavLinkRow[]) => {
+  if (categories.length !== LEGACY_SEED_CATEGORY_IDS.length || links.length !== LEGACY_SEED_LINK_IDS.length) {
+    return false;
+  }
+
+  const categoryIds = new Set(categories.map((category) => category.id));
+  const linkIds = new Set(links.map((link) => link.id));
+
+  return LEGACY_SEED_CATEGORY_IDS.every((id) => categoryIds.has(id))
+    && LEGACY_SEED_LINK_IDS.every((id) => linkIds.has(id));
+};
 
 const seedDefaultCategories = async (userId: string) => {
   const now = new Date().toISOString();
@@ -132,7 +161,7 @@ const seedDefaultCategories = async (userId: string) => {
 
   const { error: profileError } = await supabase
     .from('profiles')
-    .update({ defaults_seeded: true, updated_at: now })
+    .update({ defaults_seeded: true, default_seed_version: DEFAULT_SEED_VERSION, updated_at: now })
     .eq('id', userId);
 
   if (profileError) throw profileError;
@@ -141,7 +170,7 @@ const seedDefaultCategories = async (userId: string) => {
 const markDefaultsSeeded = async (userId: string) => {
   const { error } = await supabase
     .from('profiles')
-    .update({ defaults_seeded: true, updated_at: new Date().toISOString() })
+    .update({ defaults_seeded: true, default_seed_version: DEFAULT_SEED_VERSION, updated_at: new Date().toISOString() })
     .eq('id', userId);
 
   if (error) {
@@ -224,18 +253,38 @@ export function useCategories() {
       if ((categoryRows ?? []).length === 0) {
         const { data: profileRow, error: profileError } = await supabase
           .from('profiles')
-          .select('defaults_seeded')
+          .select('defaults_seeded, default_seed_version')
           .eq('id', userId)
           .maybeSingle();
 
         if (profileError) throw profileError;
 
-        if (!profileRow?.defaults_seeded) {
+        if (!profileRow?.defaults_seeded || (profileRow.default_seed_version ?? 0) < DEFAULT_SEED_VERSION) {
           await seedDefaultCategories(userId);
           await fetchCategories();
           return;
         }
       } else {
+        const { data: profileRow, error: profileError } = await supabase
+          .from('profiles')
+          .select('default_seed_version')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (profileError) throw profileError;
+
+        if ((profileRow?.default_seed_version ?? 0) < DEFAULT_SEED_VERSION && isLegacyDefaultSeed(categoryRows as NavCategoryRow[], linkRows as NavLinkRow[])) {
+          const { error: deleteError } = await supabase
+            .from('nav_categories')
+            .delete()
+            .in('id', LEGACY_SEED_CATEGORY_IDS);
+
+          if (deleteError) throw deleteError;
+          await seedDefaultCategories(userId);
+          await fetchCategories();
+          return;
+        }
+
         void markDefaultsSeeded(userId);
       }
 
@@ -280,7 +329,7 @@ export function useCategories() {
     }
   };
 
-  const updateItem = async (categoryId: string, itemId: string, updatedItem: Partial<LinkItem>) => {
+  const updateItem = async (categoryId: string, itemId: string, updatedItem: Partial<LinkItem> & { categoryId?: string }) => {
     try {
       const patch: Record<string, string | null> = {
         updated_at: new Date().toISOString(),
@@ -291,6 +340,7 @@ export function useCategories() {
       if (updatedItem.description !== undefined) patch.description = updatedItem.description;
       if (updatedItem.icon !== undefined) patch.icon = updatedItem.icon;
       if (updatedItem.faviconUrl !== undefined) patch.favicon_url = updatedItem.faviconUrl || null;
+      if (updatedItem.categoryId !== undefined) patch.category_id = updatedItem.categoryId;
 
       const { error: updateError } = await supabase
         .from('nav_links')
@@ -368,6 +418,113 @@ export function useCategories() {
     }
   };
 
+  const createShare = async (category: Category, linkIds: string[]) => {
+    try {
+      const userId = await getCurrentUserId();
+      if (!userId) throw new Error('Please sign in before sharing links.');
+
+      const links = category.items.filter((item) => linkIds.includes(item.id));
+      if (links.length === 0) throw new Error('Select at least one site to share.');
+
+      const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+      const payload = links.map((item) => ({
+        id: item.id,
+        name: item.name,
+        url: item.url,
+        description: item.description,
+        icon: item.icon,
+        faviconUrl: item.faviconUrl ?? '',
+      }));
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const code = createShareCode();
+        const { data, error: insertError } = await supabase
+          .from('nav_shares')
+          .insert({
+            owner_id: userId,
+            code,
+            category_title: category.title,
+            category_description: category.description,
+            links: payload,
+            expires_at: expiresAt,
+          })
+          .select('code, expires_at')
+          .single();
+
+        if (!insertError && data) {
+          return { code: data.code as string, expiresAt: data.expires_at as string };
+        }
+
+        if (insertError?.code !== '23505') {
+          throw insertError;
+        }
+      }
+
+      throw new Error('Could not create a unique share code.');
+    } catch (err) {
+      console.error('Error creating share code:', err);
+      setError(err instanceof Error ? err.message : String(err));
+      return null;
+    }
+  };
+
+  const getShare = async (code: string): Promise<NavShare | null> => {
+    try {
+      const normalizedCode = normalizeShareCode(code);
+      if (!normalizedCode) throw new Error('Enter a share code.');
+
+      const { data, error: shareError } = await supabase.rpc('get_nav_share', { share_code: normalizedCode });
+      if (shareError) throw shareError;
+
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) return null;
+
+      return {
+        code: row.code,
+        categoryTitle: row.category_title,
+        categoryDescription: row.category_description ?? '',
+        links: (row.links ?? []) as LinkItem[],
+        expiresAt: row.expires_at,
+      };
+    } catch (err) {
+      console.error('Error loading share code:', err);
+      setError(err instanceof Error ? err.message : String(err));
+      return null;
+    }
+  };
+
+  const importSharedLinks = async (categoryId: string, links: LinkItem[]) => {
+    try {
+      const userId = await getCurrentUserId();
+      if (!userId) throw new Error('Please sign in before importing links.');
+      if (!categoryId || links.length === 0) return false;
+
+      const targetCategory = categories.find((category) => category.id === categoryId);
+      const startOrder = targetCategory?.items.length ?? 0;
+      const rows = links.map((item, index) => ({
+        owner_id: userId,
+        id: createId(),
+        category_id: categoryId,
+        name: item.name,
+        url: item.url,
+        description: item.description,
+        icon: item.icon || 'link',
+        favicon_url: item.faviconUrl || null,
+        order_index: startOrder + index,
+      }));
+
+      const { error: insertError } = await supabase.from('nav_links').insert(rows);
+      if (insertError) throw insertError;
+
+      await fetchCategories();
+      return true;
+    } catch (err) {
+      console.error('Error importing shared links:', err);
+      setError(err instanceof Error ? err.message : String(err));
+      return false;
+    }
+  };
+
   const migrateFavicons = async () => {
     try {
       for (const category of categories) {
@@ -402,6 +559,9 @@ export function useCategories() {
     deleteItem,
     deleteCategory,
     createCategory,
+    createShare,
+    getShare,
+    importSharedLinks,
     refreshCategories: fetchCategories,
     migrateFavicons,
   };
