@@ -252,7 +252,7 @@ function NavBar() {
 
   return (
     <nav className="sticky top-0 z-50 bg-white/80 dark:bg-zinc-900/85 backdrop-blur-md border-b border-gray-200 dark:border-zinc-800 shadow-sm transition-colors duration-200">
-      <div className="max-w-[1200px] mx-auto px-6 lg:px-20 py-4 flex justify-between items-center">
+      <div className="max-w-[1200px] mx-auto px-6 lg:px-20 py-3 flex justify-between items-center">
         <div className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-xl">Dash</div>
         <div className="flex items-center gap-4 md:gap-8">
           <div className="flex items-baseline gap-4 md:gap-8">
@@ -284,14 +284,14 @@ function NavBar() {
               onClick={() => setAccountOpen((open) => !open)}
               title={email || accountLabels.account}
               aria-label={accountLabels.account}
-              className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white shadow-sm transition hover:scale-[1.03] hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white dark:focus-visible:ring-zinc-600"
+              className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white shadow-sm transition hover:scale-[1.03] hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
             >
               <UserRound className="h-4 w-4" />
             </button>
             {accountOpen && (
               <div className="absolute right-0 top-full mt-3 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
                 <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950">
+                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950 dark:text-white">
                     <UserRound className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
@@ -456,7 +456,7 @@ function AuthScreen({ notice }: { notice?: string }) {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 px-6 py-10 transition-colors duration-200 dark:from-zinc-950 dark:to-zinc-900">
       <section className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div className="mb-8 flex items-start gap-4">
-          <div className="mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950">
+          <div className="mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-blue-950 dark:text-white">
             <Lock className="h-5 w-5" />
           </div>
           <div>
@@ -521,7 +521,7 @@ function AuthScreen({ notice }: { notice?: string }) {
           <button
             type="submit"
             disabled={submitting}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white dark:focus-visible:ring-zinc-600"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
           >
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
             {primaryButtonLabel}
@@ -625,7 +625,7 @@ function PasswordResetScreen({ onDone }: { onDone: (notice: string) => void }) {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 px-6 py-10 transition-colors duration-200 dark:from-zinc-950 dark:to-zinc-900">
       <section className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div className="mb-8 flex items-start gap-4">
-          <div className="mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950">
+          <div className="mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-blue-950 dark:text-white">
             <Lock className="h-5 w-5" />
           </div>
           <div>
@@ -654,7 +654,7 @@ function PasswordResetScreen({ onDone }: { onDone: (notice: string) => void }) {
           <button
             type="submit"
             disabled={submitting}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white dark:focus-visible:ring-zinc-600"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
           >
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
             {t.savePassword}

@@ -140,6 +140,7 @@ const categoryIconMap: Record<string, React.ReactNode> = {
   '邮箱': <Mail className="w-5 h-5" />,
   '邮件': <Mail className="w-5 h-5" />,
   'Learning': <GraduationCap className="w-5 h-5" />,
+  'AI工具': <BrainCircuit className="w-5 h-5" />,
   'AI Tools': <BrainCircuit className="w-5 h-5" />,
   'AI Assistant': <BrainCircuit className="w-5 h-5" />,
   'Entertainment': <Video className="w-5 h-5" />,
@@ -209,6 +210,9 @@ const itemIconMap: Record<string, React.ReactNode> = {
   'directions_car': <Car className="w-6 h-6" />,
   'fitness_center': <Dumbbell className="w-6 h-6" />,
 };
+
+const primaryButtonClass = 'rounded-lg bg-gray-900 text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700';
+const selectControlClass = 'w-full appearance-none rounded-lg border-none bg-gray-100 py-3 pl-3 pr-11 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600';
 
 export default function Categories() {
   const { lang, setLang } = useContext(LangContext);
@@ -619,8 +623,8 @@ export default function Categories() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="w-full md:w-64 flex-shrink-0"
         >
-          <div className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl p-5 shadow-sm flex flex-col max-h-[50vh] md:max-h-none overflow-hidden transition-colors duration-200">
-            <div className="flex items-center justify-between mb-4 px-2 flex-shrink-0">
+          <div className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl p-4 md:p-5 shadow-sm flex flex-col max-h-[48vh] md:max-h-none overflow-hidden transition-colors duration-200">
+            <div className="flex items-center justify-between mb-3 px-0 md:px-2 flex-shrink-0">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.navigation}</h2>
               <div className="flex items-center gap-1">
                 <button
@@ -639,7 +643,7 @@ export default function Categories() {
                 </button>
               </div>
             </div>
-            <ul className="space-y-1 overflow-y-auto flex-1 min-h-0 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-300 scrollbar-thin">
+            <ul className="space-y-1 overflow-y-auto flex-1 min-h-0 pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-300 scrollbar-thin">
               {categories.map((category, index) => (
                 <li key={category.id} className="group relative">
                   <button
@@ -676,30 +680,32 @@ export default function Categories() {
                 </li>
               ))}
             </ul>
-            <hr className="my-4 border-gray-200 dark:border-zinc-700 flex-shrink-0" />
-            <button
-              onClick={() => setIsCreatingCategory(true)}
-              className="w-full flex items-center justify-center gap-2 py-2 px-4 border-2 border-dashed border-gray-300 dark:border-zinc-600 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-700 hover:border-gray-400 dark:hover:border-gray-500 transition-all text-sm font-medium"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{t.createCategory}</span>
-            </button>
-            <button
-              onClick={handleRefreshFavicons}
-              disabled={isRefreshingFavicons}
-              className="w-full flex items-center justify-center gap-2 py-2 px-4 mt-2 bg-gray-100 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-zinc-600 transition-all text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Refresh all website icons"
-            >
-              <RefreshCw className={`w-4 h-4 ${isRefreshingFavicons ? 'animate-spin' : ''}`} />
-              <span>{isRefreshingFavicons ? t.refreshing : t.refreshIcons}</span>
-            </button>
-            <button
-              onClick={openImportModal}
-              className="w-full flex items-center justify-center gap-2 py-2 px-4 mt-2 bg-gray-100 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-zinc-600 transition-all text-sm font-medium"
-            >
-              <Download className="w-4 h-4" />
-              <span>{t.importLinks}</span>
-            </button>
+            <hr className="my-3 md:my-4 border-gray-200 dark:border-zinc-700 flex-shrink-0" />
+            <div className="grid grid-cols-3 gap-2 md:grid-cols-1">
+              <button
+                onClick={() => setIsCreatingCategory(true)}
+                className="flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-300 px-2 text-xs font-medium text-gray-600 transition-all hover:border-gray-400 hover:bg-gray-50 dark:border-zinc-600 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:bg-zinc-700 md:w-full md:gap-2 md:px-4 md:text-sm"
+              >
+                <Plus className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">{t.createCategory}</span>
+              </button>
+              <button
+                onClick={handleRefreshFavicons}
+                disabled={isRefreshingFavicons}
+                className="flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-2 text-xs font-medium text-gray-700 transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600 md:w-full md:gap-2 md:px-4 md:text-sm"
+                title="Refresh all website icons"
+              >
+                <RefreshCw className={`h-4 w-4 flex-shrink-0 ${isRefreshingFavicons ? 'animate-spin' : ''}`} />
+                <span className="truncate">{isRefreshingFavicons ? t.refreshing : t.refreshIcons}</span>
+              </button>
+              <button
+                onClick={openImportModal}
+                className="flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-2 text-xs font-medium text-gray-700 transition-all hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600 md:w-full md:gap-2 md:px-4 md:text-sm"
+              >
+                <Download className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">{t.importLinks}</span>
+              </button>
+            </div>
           </div>
         </motion.aside>
 
@@ -759,7 +765,7 @@ export default function Categories() {
                 whileTap={{ scale: 0.98 }}
                 data-card
                 onClick={() => setActiveCardId(item.id)}
-                className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl p-3 md:p-5 flex flex-col justify-between group hover:shadow-lg transition-all duration-200 cursor-pointer"
+                className="min-h-[136px] md:min-h-[164px] bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl p-3 md:p-5 flex flex-col justify-between group hover:shadow-lg transition-all duration-200 cursor-pointer"
               >
                 <div>
                   <div className="flex justify-between items-start mb-2 md:mb-3">
@@ -822,12 +828,12 @@ export default function Categories() {
             {/* Add New Link Placeholder — always visible */}
             <button
               onClick={startAddNew}
-              className="col-span-2 lg:col-span-3 border-2 border-dashed border-gray-300 dark:border-zinc-600 rounded-xl p-5 md:p-8 flex flex-col items-center justify-center text-gray-600 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:bg-white dark:hover:bg-zinc-800 transition-all group"
+              className="col-span-2 min-h-[136px] border-2 border-dashed border-gray-300 p-4 text-gray-600 transition-all hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:bg-zinc-800 lg:col-span-3 md:min-h-[164px] rounded-xl flex flex-col items-center justify-center group"
             >
-              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gray-100 dark:bg-zinc-700 flex items-center justify-center mb-2 md:mb-3 group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors">
-                <Plus className="w-5 h-5 md:w-7 md:h-7" />
+              <div className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-gray-100 dark:bg-zinc-700 flex items-center justify-center mb-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors">
+                <Plus className="w-5 h-5 md:w-6 md:h-6" />
               </div>
-              <span className="font-semibold text-sm md:text-lg">{t.addNewSite}</span>
+              <span className="font-semibold text-sm md:text-base">{t.addNewSite}</span>
               <span className="text-xs md:text-sm text-gray-500 mt-0.5 md:mt-1 hidden sm:block">{t.configureHint}</span>
             </button>
           </div>
@@ -908,7 +914,7 @@ export default function Categories() {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white hover:opacity-90 transition-opacity flex items-center gap-2"
+                className={`px-6 py-2 text-sm font-medium flex items-center gap-2 ${primaryButtonClass}`}
               >
                 <Save className="w-4 h-4" />
                 {t.createCategory}
@@ -985,7 +991,7 @@ export default function Categories() {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white hover:opacity-90 transition-opacity flex items-center gap-2"
+                className={`px-6 py-2 text-sm font-medium flex items-center gap-2 ${primaryButtonClass}`}
               >
                 <Save className="w-4 h-4" />
                 {t.saveChanges}
@@ -1048,17 +1054,20 @@ export default function Categories() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.category}</label>
-              <select
-                value={formData.categoryId || selectedCategoryId}
-                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
-              >
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.title}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={formData.categoryId || selectedCategoryId}
+                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                  className={selectControlClass}
+                >
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.title}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-300" />
+              </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-500 uppercase px-1 tracking-wide">{t.description}</label>
@@ -1081,7 +1090,7 @@ export default function Categories() {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white hover:opacity-90 transition-opacity flex items-center gap-2"
+                className={`px-6 py-2 text-sm font-medium flex items-center gap-2 ${primaryButtonClass}`}
               >
                 <Save className="w-4 h-4" />
                 {editingItem ? t.saveChanges : t.addSite}
@@ -1129,40 +1138,42 @@ export default function Categories() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {selectedCategory.items.map((item) => {
-              const selected = shareSelectedIds.has(item.id);
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setShareSelectedIds((current) => toggleSetValue(current, item.id))}
-                  className={`flex min-h-[88px] items-center gap-3 rounded-lg border p-3 text-left transition ${
-                    selected
-                      ? 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
-                      : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500'
-                  }`}
-                >
-                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
-                    {item.faviconUrl ? (
-                      <img src={item.faviconUrl} alt="" className="h-full w-full object-contain" />
-                    ) : (
-                      itemIconMap[item.icon] || <BookOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
-                    <p className="truncate text-xs text-gray-500 dark:text-gray-400">{hostnameFor(item.url)}</p>
-                  </div>
-                  <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${
-                    selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-gray-300 dark:border-zinc-500'
-                  }`}>
-                    {selected && <Check className="h-3 w-3" />}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {!shareResult && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {selectedCategory.items.map((item) => {
+                const selected = shareSelectedIds.has(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setShareSelectedIds((current) => toggleSetValue(current, item.id))}
+                    className={`flex min-h-[88px] items-center gap-3 rounded-lg border p-3 text-left transition ${
+                      selected
+                        ? 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
+                        : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500'
+                    }`}
+                  >
+                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
+                      {item.faviconUrl ? (
+                        <img src={item.faviconUrl} alt="" className="h-full w-full object-contain" />
+                      ) : (
+                        itemIconMap[item.icon] || <BookOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
+                      <p className="truncate text-xs text-gray-500 dark:text-gray-400">{hostnameFor(item.url)}</p>
+                    </div>
+                    <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${
+                      selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-gray-300 dark:border-zinc-500'
+                    }`}>
+                      {selected && <Check className="h-3 w-3" />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {shareResult && (
             <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/70">
@@ -1171,14 +1182,6 @@ export default function Categories() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.shareCode}</p>
                   <p className="mt-1 font-mono text-2xl font-semibold tracking-widest text-gray-900 dark:text-gray-100">{shareResult.code}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleCopyShareCode}
-                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white transition hover:bg-gray-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                  {t.copyLink}
-                </button>
               </div>
               <p className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                 <Clock3 className="h-3.5 w-3.5" />
@@ -1198,12 +1201,12 @@ export default function Categories() {
             </button>
             <button
               type="button"
-              onClick={handleCreateShareCode}
-              disabled={shareSelectedIds.size === 0 || isGeneratingShare}
-              className="px-5 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white hover:opacity-90 transition-opacity flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-950"
+              onClick={shareResult ? handleCopyShareCode : handleCreateShareCode}
+              disabled={!shareResult && (shareSelectedIds.size === 0 || isGeneratingShare)}
+              className={`px-5 py-2 text-sm font-medium flex items-center gap-2 ${primaryButtonClass}`}
             >
-              {isGeneratingShare ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
-              {shareSelectedIds.size === 0 ? t.selectAtLeastOne : t.generateCode}
+              {shareResult ? <Copy className="w-4 h-4" /> : isGeneratingShare ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+              {shareResult ? t.copyLink : shareSelectedIds.size === 0 ? t.selectAtLeastOne : t.generateCode}
             </button>
           </div>
         </motion.div>
@@ -1257,7 +1260,7 @@ export default function Categories() {
             <button
               type="button"
               onClick={handleLoadShareCode}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white"
+              className={`inline-flex h-10 items-center justify-center gap-2 px-4 text-sm font-semibold ${primaryButtonClass}`}
             >
               <KeyRound className="h-4 w-4" />
               {t.loadShareCode}
@@ -1322,7 +1325,7 @@ export default function Categories() {
                       onClick={() => setImportTargetMode(mode)}
                       className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
                         importTargetMode === mode
-                          ? 'bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950'
+                          ? 'bg-gray-900 text-white dark:bg-blue-950 dark:text-white'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600'
                       }`}
                     >
@@ -1332,15 +1335,18 @@ export default function Categories() {
                 </div>
 
                 {importTargetMode === 'existing' ? (
-                  <select
-                    value={importCategoryId}
-                    onChange={(e) => setImportCategoryId(e.target.value)}
-                    className="w-full rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
-                  >
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>{category.title}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={importCategoryId}
+                      onChange={(e) => setImportCategoryId(e.target.value)}
+                      className={selectControlClass}
+                    >
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>{category.title}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-300" />
+                  </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <input
@@ -1381,7 +1387,7 @@ export default function Categories() {
               type="button"
               onClick={handleImportSharedLinks}
               disabled={!loadedShare || importSelectedIds.size === 0}
-              className="px-5 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white hover:opacity-90 transition-opacity flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-950"
+              className={`px-5 py-2 text-sm font-medium flex items-center gap-2 ${primaryButtonClass}`}
             >
               <Download className="w-4 h-4" />
               {t.importSelected}

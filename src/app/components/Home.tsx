@@ -39,6 +39,7 @@ const categoryIconMap: Record<string, React.ReactNode> = {
   '邮箱': <Mail className="w-5 h-5" />,
   '邮件': <Mail className="w-5 h-5" />,
   'Learning': <GraduationCap className="w-5 h-5" />,
+  'AI工具': <BrainCircuit className="w-5 h-5" />,
   'AI Tools': <BrainCircuit className="w-5 h-5" />,
   'AI Assistant': <BrainCircuit className="w-5 h-5" />,
   'Entertainment': <Video className="w-5 h-5" />,
@@ -88,6 +89,7 @@ const categoryColorMap: Record<string, { bgColor: string; textColor: string }> =
 // FAB constants at module level to avoid stale closure issues
 const FAB_SIZE = 44;
 const FAB_MARGIN = 16;
+const COLLAPSED_CATEGORIES_KEY = 'dash-collapsed-categories';
 
 interface WeatherData {
   temperature: number;
@@ -107,7 +109,15 @@ export default function Home() {
   const { categories, loading } = useCategories();
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loadingWeather, setLoadingWeather] = useState(true);
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(COLLAPSED_CATEGORIES_KEY);
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? new Set(parsed.filter((id): id is string => typeof id === 'string')) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   const [siteSearchOpen, setSiteSearchOpen] = useState(false);
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
   const [highlightedSiteId, setHighlightedSiteId] = useState<string | null>(null);
@@ -224,6 +234,14 @@ export default function Home() {
   const handleFabClick = () => {
     if (!didDrag.current) setSiteSearchOpen(true);
   };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSED_CATEGORIES_KEY, JSON.stringify(Array.from(collapsedCategories)));
+    } catch {
+      // ignore storage failures
+    }
+  }, [collapsedCategories]);
 
   const fuzzyMatch = (query: string, text: string): boolean => {
     if (!query) return true;
@@ -523,7 +541,7 @@ export default function Home() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={searchEngine === 'google' ? 'Search with Google...' : (lang === 'en' ? 'Search with Baidu...' : '百度一下...')}
-              className="w-full pl-12 pr-16 py-4 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-gray-100/10 focus:border-gray-900 dark:focus:border-gray-400 focus:shadow-md transition-all duration-300 shadow-sm text-lg"
+              className="w-full pl-11 pr-14 py-3 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-gray-100/10 focus:border-gray-900 dark:focus:border-gray-400 focus:shadow-md transition-all duration-300 shadow-sm text-base"
             />
             {/* Search engine selector */}
             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">

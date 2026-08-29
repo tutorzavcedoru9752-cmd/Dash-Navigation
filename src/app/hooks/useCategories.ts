@@ -53,12 +53,12 @@ type DefaultCategorySeed = {
 };
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-e5a5bd76`;
-const DEFAULT_SEED_VERSION = 2;
+const DEFAULT_SEED_VERSION = 3;
 
 const DEFAULT_CATEGORY_SEEDS: DefaultCategorySeed[] = [
   {
     id: 'ai-tools',
-    title: 'AI Tools',
+    title: 'AI工具',
     description: '常用 AI 助手与内容创作工具。',
     items: [
       { id: 'chat-gpt', name: 'Chat GPT', url: 'https://chatgpt.com', description: 'AI assistant for writing, coding and ideation.', icon: 'robot_2' },
@@ -90,6 +90,8 @@ const DEFAULT_CATEGORY_SEEDS: DefaultCategorySeed[] = [
 
 const LEGACY_SEED_CATEGORY_IDS = ['ai-tools', 'design', 'productivity'];
 const LEGACY_SEED_LINK_IDS = ['chatgpt', 'perplexity', 'claude', 'figma', 'dribbble', 'unsplash', 'notion', 'github', 'google-drive'];
+const DEFAULT_SEED_CATEGORY_IDS = ['ai-tools', 'entertainment', 'email'];
+const DEFAULT_SEED_LINK_IDS = ['chat-gpt', 'doubao', 'deepseek', 'xiaohongshu', 'zhihu', 'bilibili', 'qq-mail', '163-mail', 'gmail'];
 
 const getCurrentUserId = async () => {
   const { data, error } = await supabase.auth.getUser();
@@ -125,6 +127,18 @@ const isLegacyDefaultSeed = (categories: NavCategoryRow[], links: NavLinkRow[]) 
 
   return LEGACY_SEED_CATEGORY_IDS.every((id) => categoryIds.has(id))
     && LEGACY_SEED_LINK_IDS.every((id) => linkIds.has(id));
+};
+
+const isCurrentDefaultSeed = (categories: NavCategoryRow[], links: NavLinkRow[]) => {
+  if (categories.length !== DEFAULT_SEED_CATEGORY_IDS.length || links.length !== DEFAULT_SEED_LINK_IDS.length) {
+    return false;
+  }
+
+  const categoryIds = new Set(categories.map((category) => category.id));
+  const linkIds = new Set(links.map((link) => link.id));
+
+  return DEFAULT_SEED_CATEGORY_IDS.every((id) => categoryIds.has(id))
+    && DEFAULT_SEED_LINK_IDS.every((id) => linkIds.has(id));
 };
 
 const seedDefaultCategories = async (userId: string) => {
@@ -280,6 +294,12 @@ export function useCategories() {
             .in('id', LEGACY_SEED_CATEGORY_IDS);
 
           if (deleteError) throw deleteError;
+          await seedDefaultCategories(userId);
+          await fetchCategories();
+          return;
+        }
+
+        if ((profileRow?.default_seed_version ?? 0) < DEFAULT_SEED_VERSION && isCurrentDefaultSeed(categoryRows as NavCategoryRow[], linkRows as NavLinkRow[])) {
           await seedDefaultCategories(userId);
           await fetchCategories();
           return;
