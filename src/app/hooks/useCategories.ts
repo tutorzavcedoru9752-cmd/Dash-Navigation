@@ -37,7 +37,51 @@ type NavLinkRow = {
   order_index: number | null;
 };
 
+type DefaultCategorySeed = {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  items: Array<Omit<LinkItem, 'id' | 'faviconUrl'> & { id: string }>;
+};
+
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-e5a5bd76`;
+
+const DEFAULT_CATEGORY_SEEDS: DefaultCategorySeed[] = [
+  {
+    id: 'ai-tools',
+    title: 'AI Tools',
+    description: 'Common AI assistants and research tools.',
+    icon: 'robot_2',
+    items: [
+      { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com', description: 'AI assistant for writing, coding and ideation.', icon: 'robot_2' },
+      { id: 'perplexity', name: 'Perplexity', url: 'https://www.perplexity.ai', description: 'AI search and answer engine.', icon: 'quiz' },
+      { id: 'claude', name: 'Claude', url: 'https://claude.ai', description: 'AI assistant for long-form work.', icon: 'psychology' },
+    ],
+  },
+  {
+    id: 'design',
+    title: 'Design',
+    description: 'Design, inspiration and visual workflow links.',
+    icon: 'palette',
+    items: [
+      { id: 'figma', name: 'Figma', url: 'https://www.figma.com', description: 'Collaborative interface design tool.', icon: 'palette' },
+      { id: 'dribbble', name: 'Dribbble', url: 'https://dribbble.com', description: 'Design inspiration and portfolios.', icon: 'style' },
+      { id: 'unsplash', name: 'Unsplash', url: 'https://unsplash.com', description: 'Free high-quality photography.', icon: 'photo_camera' },
+    ],
+  },
+  {
+    id: 'productivity',
+    title: 'Productivity',
+    description: 'Everyday notes, storage and development tools.',
+    icon: 'settings',
+    items: [
+      { id: 'notion', name: 'Notion', url: 'https://www.notion.so', description: 'Workspace for notes, tasks and knowledge.', icon: 'book' },
+      { id: 'github', name: 'GitHub', url: 'https://github.com', description: 'Code hosting and collaboration.', icon: 'code' },
+      { id: 'google-drive', name: 'Google Drive', url: 'https://drive.google.com', description: 'Cloud files and shared documents.', icon: 'cloud' },
+    ],
+  },
+];
 
 const getCurrentUserId = async () => {
   const { data, error } = await supabase.auth.getUser();
@@ -50,6 +94,59 @@ const createId = () => {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
+const faviconUrlFor = (url: string) => `https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(url)}`;
+
+const seedDefaultCategories = async (userId: string) => {
+  const now = new Date().toISOString();
+  const categoryRows = DEFAULT_CATEGORY_SEEDS.map((category, index) => ({
+    owner_id: userId,
+    id: category.id,
+    title: category.title,
+    description: category.description,
+    order_index: index,
+    updated_at: now,
+  }));
+
+  const linkRows = DEFAULT_CATEGORY_SEEDS.flatMap((category) =>
+    category.items.map((item, index) => ({
+      owner_id: userId,
+      id: item.id,
+      category_id: category.id,
+      name: item.name,
+      url: item.url,
+      description: item.description,
+      icon: item.icon,
+      favicon_url: faviconUrlFor(item.url),
+      order_index: index,
+      updated_at: now,
+    }))
+  );
+
+  const { error: categoryError } = await supabase.from('nav_categories').upsert(categoryRows, { onConflict: 'owner_id,id' });
+  if (categoryError) throw categoryError;
+
+  const { error: linkError } = await supabase.from('nav_links').upsert(linkRows, { onConflict: 'owner_id,id' });
+  if (linkError) throw linkError;
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({ defaults_seeded: true, updated_at: now })
+    .eq('id', userId);
+
+  if (profileError) throw profileError;
+};
+
+const markDefaultsSeeded = async (userId: string) => {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ defaults_seeded: true, updated_at: new Date().toISOString() })
+    .eq('id', userId);
+
+  if (error) {
+    console.error('Error marking default categories as seeded:', error);
+  }
 };
 
 const toCategory = (category: NavCategoryRow, links: NavLinkRow[]): Category => ({
@@ -123,6 +220,24 @@ export function useCategories() {
         .order('name', { ascending: true });
 
       if (linkError) throw linkError;
+
+      if ((categoryRows ?? []).length === 0) {
+        const { data: profileRow, error: profileError } = await supabase
+          .from('profiles')
+          .select('defaults_seeded')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (profileError) throw profileError;
+
+        if (!profileRow?.defaults_seeded) {
+          await seedDefaultCategories(userId);
+          await fetchCategories();
+          return;
+        }
+      } else {
+        void markDefaultsSeeded(userId);
+      }
 
       const nextCategories = (categoryRows ?? []).map((category) =>
         toCategory(category as NavCategoryRow, (linkRows ?? []) as NavLinkRow[])
@@ -291,4 +406,3 @@ export function useCategories() {
     migrateFavicons,
   };
 }
-
