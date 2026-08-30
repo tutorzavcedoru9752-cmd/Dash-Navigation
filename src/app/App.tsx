@@ -67,7 +67,7 @@ const ACCOUNT_LABELS = {
 const AUTH_LABELS = {
   en: {
     title: 'Dash-Navigation',
-    subtitle: '定制和分享你的浏览器导航页',
+    subtitle: 'Customize and share your browser navigation page',
     email: 'Email',
     password: 'Password',
     signIn: 'Sign in',
@@ -521,7 +521,7 @@ function AuthScreen({ notice }: { notice?: string }) {
           <button
             type="submit"
             disabled={submitting}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
           >
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
             {primaryButtonLabel}
@@ -654,7 +654,7 @@ function PasswordResetScreen({ onDone }: { onDone: (notice: string) => void }) {
           <button
             type="submit"
             disabled={submitting}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
           >
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
             {t.savePassword}

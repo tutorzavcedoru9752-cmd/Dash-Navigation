@@ -63,6 +63,7 @@ const ui = {
     toastShareCopied: 'Share code copied',
     toastShareLoaded: 'Share loaded',
     toastImported: 'Links imported',
+    toastDuplicatesRemoved: (count: number) => `${count} duplicate ${count === 1 ? 'link was' : 'links were'} removed`,
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
     docs: 'Documentation',
@@ -127,6 +128,7 @@ const ui = {
     toastShareCopied: '分享码已复制',
     toastShareLoaded: '分享内容已读取',
     toastImported: '网址已导入',
+    toastDuplicatesRemoved: (count: number) => `已移除 ${count} 个重复网址`,
     privacy: '隐私政策',
     terms: '服务条款',
     docs: '文档',
@@ -261,6 +263,20 @@ export default function Categories() {
       return new URL(url).hostname.replace(/^www\./, '');
     } catch {
       return url;
+    }
+  };
+
+  const normalizeUrlForCompare = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return '';
+
+    try {
+      const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+      const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+      const path = parsed.pathname.replace(/\/+$/, '');
+      return `${host}${path}${parsed.search}`.toLowerCase();
+    } catch {
+      return trimmed.replace(/\/+$/, '').toLowerCase();
     }
   };
 
@@ -526,14 +542,30 @@ export default function Categories() {
       return;
     }
 
-    setLoadedShare(share);
-    setImportSelectedIds(new Set(share.links.map((item) => item.id)));
+    const existingUrls = new Set(
+      categories.flatMap((category) => category.items.map((item) => normalizeUrlForCompare(item.url)))
+    );
+    const seenShareUrls = new Set<string>();
+    let duplicateCount = 0;
+    const uniqueLinks = share.links.filter((item) => {
+      const key = normalizeUrlForCompare(item.url);
+      if (!key || existingUrls.has(key) || seenShareUrls.has(key)) {
+        duplicateCount += 1;
+        return false;
+      }
+      seenShareUrls.add(key);
+      return true;
+    });
+    const dedupedShare = { ...share, links: uniqueLinks };
+
+    setLoadedShare(dedupedShare);
+    setImportSelectedIds(new Set(uniqueLinks.map((item) => item.id)));
     setImportNewCategory({
       id: createCategoryIdFromTitle(share.categoryTitle),
       title: share.categoryTitle,
       description: share.categoryDescription,
     });
-    finishToast(t.toastShareLoaded);
+    finishToast(duplicateCount > 0 ? t.toastDuplicatesRemoved(duplicateCount) : t.toastShareLoaded);
   };
 
   const handleImportSharedLinks = async () => {
@@ -560,6 +592,15 @@ export default function Categories() {
       setIsImportingShare(false);
       finishToast(t.toastImported);
     }
+  };
+
+  const handleImportPrimaryAction = async () => {
+    if (!loadedShare) {
+      await handleLoadShareCode();
+      return;
+    }
+
+    await handleImportSharedLinks();
   };
 
   const handleDeleteCategoryFromList = async (categoryId: string) => {
@@ -894,7 +935,7 @@ export default function Categories() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500 uppercase px-1 tracking-wide">{t.description}</label>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.description}</label>
               <textarea
                 className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
                 rows={2}
@@ -971,7 +1012,7 @@ export default function Categories() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500 uppercase px-1 tracking-wide">{t.description}</label>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.description}</label>
               <textarea
                 className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
                 rows={2}
@@ -1070,7 +1111,7 @@ export default function Categories() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500 uppercase px-1 tracking-wide">{t.description}</label>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.description}</label>
               <textarea
                 className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
                 rows={2}
@@ -1119,23 +1160,9 @@ export default function Categories() {
           onClick={(e) => e.stopPropagation()}
           className="relative bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
         >
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-900 dark:bg-zinc-700 dark:text-gray-100">
-                <Share2 className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.shareCategory}</h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t.shareHint}</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsSharingCategory(false)}
-              className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-zinc-700 dark:hover:text-gray-100"
-            >
-              <X className="h-4 w-4" />
-            </button>
+          <div className="mb-6 flex items-center gap-2">
+            <Share2 className="w-5 h-5 text-gray-900 dark:text-gray-100" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.shareCategory}</h2>
           </div>
 
           {!shareResult && (
@@ -1176,7 +1203,7 @@ export default function Categories() {
           )}
 
           {shareResult && (
-            <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/70">
+            <div className="mt-5 rounded-lg bg-gray-100 p-4 dark:bg-zinc-700">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.shareCode}</p>
@@ -1250,34 +1277,24 @@ export default function Categories() {
             </button>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              value={importCode}
-              onChange={(e) => setImportCode(e.target.value.toUpperCase())}
-              placeholder={t.shareCodePlaceholder}
-              className="min-w-0 flex-1 rounded-lg bg-gray-100 px-3 py-2.5 font-mono text-sm tracking-widest text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
-            />
-            <button
-              type="button"
-              onClick={handleLoadShareCode}
-              className={`inline-flex h-10 items-center justify-center gap-2 px-4 text-sm font-semibold ${primaryButtonClass}`}
-            >
-              <KeyRound className="h-4 w-4" />
-              {t.loadShareCode}
-            </button>
-          </div>
+          {!loadedShare && (
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                value={importCode}
+                onChange={(e) => setImportCode(e.target.value.toUpperCase())}
+                placeholder={t.shareCodePlaceholder}
+                className="min-w-0 flex-1 rounded-lg bg-gray-100 px-3 py-2.5 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+              />
+            </div>
+          )}
 
           {loadedShare && (
             <div className="mt-5 space-y-5">
-              <div className="flex flex-col gap-1 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/70">
+              <div className="flex flex-col gap-1 rounded-lg bg-gray-100 p-4 dark:bg-zinc-700">
                 <p className="font-semibold text-gray-900 dark:text-gray-100">{loadedShare.categoryTitle}</p>
                 {loadedShare.categoryDescription && (
                   <p className="text-sm text-gray-500 dark:text-gray-400">{loadedShare.categoryDescription}</p>
                 )}
-                <p className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <Clock3 className="h-3.5 w-3.5" />
-                  {t.shareExpires}: {new Date(loadedShare.expiresAt).toLocaleString()}
-                </p>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1317,29 +1334,13 @@ export default function Categories() {
 
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.importTo}</p>
-                <div className="flex gap-2">
-                  {(['existing', 'new'] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setImportTargetMode(mode)}
-                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                        importTargetMode === mode
-                          ? 'bg-gray-900 text-white dark:bg-blue-950 dark:text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600'
-                      }`}
-                    >
-                      {mode === 'existing' ? t.existingCategory : t.newCategory}
-                    </button>
-                  ))}
-                </div>
-
-                {importTargetMode === 'existing' ? (
-                  <div className="relative">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="relative min-w-0 flex-1 sm:max-w-xs">
                     <select
                       value={importCategoryId}
                       onChange={(e) => setImportCategoryId(e.target.value)}
-                      className={selectControlClass}
+                      disabled={importTargetMode === 'new'}
+                      className={`${selectControlClass} disabled:cursor-not-allowed disabled:opacity-55`}
                     >
                       {categories.map((category) => (
                         <option key={category.id} value={category.id}>{category.title}</option>
@@ -1347,7 +1348,21 @@ export default function Categories() {
                     </select>
                     <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-300" />
                   </div>
-                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setImportTargetMode(importTargetMode === 'new' ? 'existing' : 'new')}
+                    className={`flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-all ${
+                      importTargetMode === 'new'
+                        ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-200 dark:hover:bg-zinc-600'
+                        : 'border-2 border-dashed border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50 dark:border-zinc-600 dark:text-gray-300 dark:hover:border-gray-500 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    <Plus className="h-4 w-4" />
+                    {importTargetMode === 'new' ? t.existingCategory : t.createCategory}
+                  </button>
+                </div>
+
+                {importTargetMode === 'new' && (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <input
                       value={importNewCategory.id}
@@ -1385,12 +1400,12 @@ export default function Categories() {
             </button>
             <button
               type="button"
-              onClick={handleImportSharedLinks}
-              disabled={!loadedShare || importSelectedIds.size === 0}
+              onClick={handleImportPrimaryAction}
+              disabled={!loadedShare ? !importCode.trim() : importSelectedIds.size === 0}
               className={`px-5 py-2 text-sm font-medium flex items-center gap-2 ${primaryButtonClass}`}
             >
-              <Download className="w-4 h-4" />
-              {t.importSelected}
+              {loadedShare ? <Download className="w-4 h-4" /> : <KeyRound className="w-4 h-4" />}
+              {loadedShare ? t.importSelected : t.loadShareCode}
             </button>
           </div>
         </motion.div>
