@@ -767,8 +767,8 @@ export default function Home() {
             height: FAB_SIZE,
             transition: isSnapping ? 'left 0.28s cubic-bezier(0.34,1.56,0.64,1), top 0.28s cubic-bezier(0.34,1.56,0.64,1)' : undefined,
           }}
-          className={`fixed z-40 rounded-full bg-gray-900 text-white shadow-lg flex items-center justify-center select-none transition-colors ${
-            isDragging ? 'cursor-grabbing shadow-2xl scale-105' : 'cursor-grab hover:bg-gray-700 active:scale-95'
+          className={`fixed z-40 rounded-full bg-gray-900 text-white shadow-lg flex items-center justify-center select-none transition-colors dark:bg-blue-950 ${
+            isDragging ? 'cursor-grabbing shadow-2xl scale-105' : 'cursor-grab hover:bg-gray-700 active:scale-95 dark:hover:bg-blue-900'
           }`}
           aria-label={lang === 'en' ? 'Search sites' : '搜索网站'}
           title={lang === 'en' ? 'Search sites (⌘K)' : '搜索网站 (⌘K)'}

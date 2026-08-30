@@ -59,7 +59,8 @@ type UserProfile = {
 };
 
 type ProfilePatch = {
-  display_name: string;
+  display_name?: string;
+  avatar_url?: string | null;
 };
 
 // ─── Nav labels ───────────────────────────────────────────────────────────────
@@ -73,6 +74,10 @@ const ACCOUNT_LABELS = {
   en: {
     account: 'Account',
     displayName: 'Display name',
+    avatarUrl: 'Avatar URL',
+    avatarLocked: 'Custom avatar is a lifetime membership feature.',
+    saveProfile: 'Save changes',
+    cancel: 'Cancel',
     free: 'Free',
     lifetime: 'Lifetime',
     editAccount: 'Edit account',
@@ -98,6 +103,10 @@ const ACCOUNT_LABELS = {
   zh: {
     account: '账号',
     displayName: '用户名',
+    avatarUrl: '头像地址',
+    avatarLocked: '自定义头像是会员功能，请先升级会员。',
+    saveProfile: '保存修改',
+    cancel: '取消',
     free: 'Free',
     lifetime: '终身会员',
     editAccount: '编辑账号',
@@ -286,8 +295,9 @@ function NavBar() {
   const { session, profile, updateProfile } = useContext(AuthContext);
   const { summary, openUpgradeDialog } = useContext(MembershipContext);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [accountPanel, setAccountPanel] = useState<'edit' | 'wallpaper'>('edit');
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
+  const [avatarInput, setAvatarInput] = useState('');
   const [profileStatus, setProfileStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [profileToast, setProfileToast] = useState<{ status: 'saving' | 'done' | 'error'; msg: string } | null>(null);
   const accountRef = useRef<HTMLDivElement>(null);
@@ -298,6 +308,7 @@ function NavBar() {
   const accountLabels = ACCOUNT_LABELS[lang];
   const email = session?.user.email ?? '';
   const name = profile?.display_name || getFallbackName(session);
+  const avatarUrl = profile?.avatar_url || '';
   const isLifetime = summary.plan === 'lifetime';
   const planLabel = isLifetime ? accountLabels.lifetime : accountLabels.free;
   const categoryUsage = isLifetime ? '∞' : `${summary.categoryCount}/${FREE_CATEGORY_LIMIT}`;
@@ -305,7 +316,8 @@ function NavBar() {
 
   useEffect(() => {
     setDisplayName(name);
-  }, [name]);
+    setAvatarInput(avatarUrl);
+  }, [avatarUrl, name]);
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
@@ -329,23 +341,32 @@ function NavBar() {
     }
   };
 
-  const handleProfileBlur = async () => {
-    const nextName = displayName.trim() || getFallbackName(session);
-    if (nextName === name || profileStatus === 'saving') return;
+  const handleProfileSave = async (nextNameValue: string, nextAvatarValue: string) => {
+    const nextName = nextNameValue.trim() || getFallbackName(session);
+    const nextAvatar = nextAvatarValue.trim();
+    const nextAvatarUrl = isLifetime ? (nextAvatar || null) : (avatarUrl || null);
+    const avatarChanged = isLifetime && (nextAvatarUrl || '') !== avatarUrl;
+
+    if ((nextName === name && !avatarChanged) || profileStatus === 'saving') return true;
 
     setProfileStatus('saving');
     showProfileToast('saving', accountLabels.saving, false);
     const result = await updateProfile({
       display_name: nextName,
+      ...(isLifetime ? { avatar_url: nextAvatarUrl } : {}),
     });
     setProfileStatus(result.error ? 'error' : 'saved');
     showProfileToast(result.error ? 'error' : 'done', result.error ? accountLabels.profileError : accountLabels.saved);
     if (!result.error) {
+      setDisplayName(nextName);
+      setAvatarInput(nextAvatarUrl || '');
       window.setTimeout(() => setProfileStatus('idle'), 1400);
     }
+    return !result.error;
   };
 
   return (
+    <>
     <nav className="sticky top-0 z-50 bg-white/80 dark:bg-zinc-900/85 backdrop-blur-md border-b border-gray-200 dark:border-zinc-800 shadow-sm transition-colors duration-200">
       <div className="max-w-[1200px] mx-auto px-6 lg:px-20 py-3 flex justify-between items-center">
         <div className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-xl">Dash</div>
@@ -384,19 +405,19 @@ function NavBar() {
               <UserRound className="h-4 w-4" />
             </button>
             {accountOpen && (
-              <div className="absolute right-0 top-full mt-3 w-[min(24.5rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white p-8 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
-                <div className="mb-5 flex items-center gap-5">
-                  <div className="flex h-[60px] w-[60px] flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950 dark:text-white">
+              <div className="absolute right-0 top-full mt-3 max-h-[calc(100vh-5rem)] w-[min(21rem,calc(100vw-1.5rem))] overflow-y-auto rounded-lg border border-gray-200 bg-white p-4 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950 dark:text-white">
                     {profile?.avatar_url ? (
                       <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <UserRound className="h-8 w-8" />
+                      <UserRound className="h-5 w-5" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">
-                      <p className="truncate text-[20px] font-semibold leading-6 text-gray-950 dark:text-gray-100">{name}</p>
-                      <span className={`inline-flex h-5 flex-shrink-0 items-center rounded-full px-3 text-[13px] font-medium leading-5 ${
+                      <p className="truncate text-base font-semibold leading-5 text-gray-950 dark:text-gray-100">{name}</p>
+                      <span className={`inline-flex h-5 flex-shrink-0 items-center rounded-full px-2 text-xs font-medium ${
                         isLifetime
                           ? 'bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950'
                           : 'bg-gray-200 text-gray-600 dark:bg-zinc-700 dark:text-zinc-300'
@@ -404,46 +425,29 @@ function NavBar() {
                         {planLabel}
                       </span>
                     </div>
-                    <p className="mt-1 truncate text-[17px] leading-[22px] text-gray-500 dark:text-gray-400">{email}</p>
+                    <p className="mt-1 truncate text-xs leading-4 text-gray-500 dark:text-gray-400">{email}</p>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <button
                     type="button"
-                    onClick={() => setAccountPanel('edit')}
-                    className={`flex h-[52px] w-full items-center gap-4 rounded-lg px-4 text-left text-[20px] font-semibold leading-6 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 ${
-                      accountPanel === 'edit'
-                        ? 'bg-gray-200 text-gray-700 dark:bg-zinc-800 dark:text-zinc-100'
-                        : 'text-gray-600 hover:bg-gray-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
-                    }`}
+                    onClick={() => {
+                      setAccountOpen(false);
+                      setEditProfileOpen(true);
+                    }}
+                    className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
                   >
-                    <Pencil className="h-7 w-7 flex-shrink-0" />
+                    <Pencil className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-zinc-400" />
                     <span>{accountLabels.editAccount}</span>
                   </button>
-                  {accountPanel === 'edit' && (
-                    <label className="block px-1 pb-2">
-                      <span className="sr-only">{accountLabels.displayName}</span>
-                      <input
-                        value={displayName}
-                        onChange={(event) => setDisplayName(event.target.value)}
-                        onBlur={handleProfileBlur}
-                        className="w-full rounded-lg bg-gray-100 px-4 py-2.5 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
-                      />
-                    </label>
-                  )}
                   <button
                     type="button"
                     onClick={() => {
-                      setAccountPanel('wallpaper');
                       showProfileToast('done', accountLabels.comingSoon);
                     }}
-                    className={`flex h-[52px] w-full items-center gap-4 rounded-lg px-4 text-left text-[20px] font-semibold leading-6 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 ${
-                      accountPanel === 'wallpaper'
-                        ? 'bg-gray-200 text-gray-700 dark:bg-zinc-800 dark:text-zinc-100'
-                        : 'text-gray-600 hover:bg-gray-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
-                    }`}
+                    className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
                   >
-                    <Settings className="h-7 w-7 flex-shrink-0" />
+                    <Settings className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-zinc-400" />
                     <span>{accountLabels.setWallpaper}</span>
                   </button>
                   <button
@@ -454,27 +458,27 @@ function NavBar() {
                         openUpgradeDialog();
                       }
                     }}
-                    className="flex h-[52px] w-full items-center gap-4 rounded-lg px-4 text-left text-[20px] font-semibold leading-6 text-gray-600 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
+                    className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
                   >
-                    <Diamond className="h-7 w-7 flex-shrink-0" />
+                    <Diamond className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-zinc-400" />
                     <span>{isLifetime ? accountLabels.alreadyMember : accountLabels.upgrade}</span>
                   </button>
                 </div>
-                <div className="mt-8 flex items-center gap-9 text-[20px] leading-6 text-gray-500 dark:text-gray-400">
-                  <div className="flex items-center gap-2.5">
-                    <Grid2X2 className="h-5 w-5" />
-                    <span>{categoryUsage}</span>
+                <div className="mt-4 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-zinc-800">
+                  <div className="flex min-w-0 items-center gap-4 text-xs font-medium text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center gap-1.5">
+                      <Grid2X2 className="h-3.5 w-3.5" />
+                      <span>{categoryUsage}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <PanelTop className="h-3.5 w-3.5" />
+                      <span>{linkUsage}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2.5">
-                    <PanelTop className="h-5 w-5" />
-                    <span>{linkUsage}</span>
-                  </div>
-                </div>
-                <div className="mt-7 flex justify-end">
                   <button
                     type="button"
                     onClick={() => supabase.auth.signOut()}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+                    className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
                   >
                     <LogOut className="h-3.5 w-3.5" />
                     {accountLabels.signOut}
@@ -500,6 +504,158 @@ function NavBar() {
         <span>{profileToast?.msg ?? ''}</span>
       </div>
     </nav>
+    <EditProfileDialog
+      open={editProfileOpen}
+      onClose={() => setEditProfileOpen(false)}
+      name={displayName}
+      email={email}
+      avatarUrl={avatarInput}
+      isLifetime={isLifetime}
+      onSave={handleProfileSave}
+      onUpgrade={() => {
+        setEditProfileOpen(false);
+        openUpgradeDialog();
+      }}
+    />
+    </>
+  );
+}
+
+function EditProfileDialog({
+  open,
+  onClose,
+  name,
+  email,
+  avatarUrl,
+  isLifetime,
+  onSave,
+  onUpgrade,
+}: {
+  open: boolean;
+  onClose: () => void;
+  name: string;
+  email: string;
+  avatarUrl: string;
+  isLifetime: boolean;
+  onSave: (name: string, avatarUrl: string) => Promise<boolean>;
+  onUpgrade: () => void;
+}) {
+  const { lang } = useContext(LangContext);
+  const t = ACCOUNT_LABELS[lang];
+  const [draftName, setDraftName] = useState(name);
+  const [draftAvatar, setDraftAvatar] = useState(avatarUrl);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setDraftName(name);
+      setDraftAvatar(avatarUrl);
+      setSaving(false);
+    }
+  }, [avatarUrl, name, open]);
+
+  if (!open) return null;
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (saving) return;
+
+    setSaving(true);
+    const ok = await onSave(draftName, draftAvatar);
+    setSaving(false);
+    if (ok) onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-4 py-6 sm:items-center">
+      <button
+        type="button"
+        aria-label="Close profile dialog"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/45 backdrop-blur-sm"
+      />
+      <section className="relative max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 sm:p-6">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Pencil className="h-5 w-5 text-gray-900 dark:text-gray-100" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.editAccount}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex items-center gap-3 rounded-lg bg-gray-100 p-3 dark:bg-zinc-800">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950">
+              {draftAvatar && isLifetime ? (
+                <img src={draftAvatar} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <UserRound className="h-5 w-5" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{draftName || name}</p>
+              <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{email}</p>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.displayName}</span>
+            <input
+              value={draftName}
+              onChange={(event) => setDraftName(event.target.value)}
+              className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.avatarUrl}</span>
+            <input
+              value={isLifetime ? draftAvatar : ''}
+              onChange={(event) => setDraftAvatar(event.target.value)}
+              disabled={!isLifetime}
+              placeholder="https://..."
+              className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-base text-gray-900 outline-none ring-1 ring-transparent transition placeholder:text-gray-400 focus:ring-2 focus:ring-gray-300 disabled:cursor-not-allowed disabled:text-gray-400 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
+            />
+          </label>
+
+          {!isLifetime && (
+            <button
+              type="button"
+              onClick={onUpgrade}
+              className="flex w-full items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-left text-xs font-medium text-gray-600 transition hover:bg-gray-200 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 dark:focus-visible:ring-zinc-600"
+            >
+              <Lock className="h-4 w-4 flex-shrink-0" />
+              <span>{t.avatarLocked}</span>
+            </button>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
+            >
+              <X className="h-4 w-4" />
+              {t.cancel}
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex h-10 items-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {saving ? t.saving : t.saveProfile}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
   );
 }
 
@@ -887,15 +1043,14 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
         className="absolute inset-0 bg-black/45 backdrop-blur-sm"
       />
       <section className="relative w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
-        <div className="flex items-start justify-between gap-4">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950">
-              {status === 'success' ? <Sparkles className="h-5 w-5" /> : <Diamond className="h-5 w-5" />}
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-950 dark:text-gray-100">{isLifetime ? t.alreadyMember : t.upgradeTitle}</h2>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t.upgradeSubtitle}</p>
-            </div>
+            {status === 'success' ? (
+              <Sparkles className="h-5 w-5 text-gray-900 dark:text-gray-100" />
+            ) : (
+              <Diamond className="h-5 w-5 text-gray-900 dark:text-gray-100" />
+            )}
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{isLifetime ? t.alreadyMember : t.upgradeTitle}</h2>
           </div>
           <button
             type="button"
@@ -906,7 +1061,7 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
           </button>
         </div>
 
-        <div className="mt-5 rounded-lg bg-gray-100 p-4 dark:bg-zinc-800">
+        <div className="rounded-lg bg-gray-100 p-4 dark:bg-zinc-800">
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{t.lifetime}</p>
@@ -1049,12 +1204,16 @@ export default function App() {
   const updateProfile = async (patch: ProfilePatch) => {
     if (!session) return { error: 'Not signed in' };
 
+    const updates: Record<string, string | null> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (patch.display_name !== undefined) updates.display_name = patch.display_name;
+    if (patch.avatar_url !== undefined) updates.avatar_url = patch.avatar_url;
+
     const { data, error } = await supabase
       .from('profiles')
-      .update({
-        display_name: patch.display_name,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', session.user.id)
       .select('id, display_name, avatar_url')
       .single();

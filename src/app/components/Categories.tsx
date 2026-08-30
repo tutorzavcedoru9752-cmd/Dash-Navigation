@@ -242,17 +242,15 @@ function SiteFavicon({ item }: { item: Pick<LinkItem, 'name' | 'icon' | 'favicon
 
 function ShareAuthor({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
   return (
-    <div className="flex flex-shrink-0 items-center gap-2 text-right">
-      <div className="min-w-0">
-        <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">{name}</p>
-      </div>
-      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950">
+    <div className="flex min-w-0 flex-shrink-0 items-center gap-2 text-left">
+      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950">
         {avatarUrl ? (
           <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <UserRound className="h-4 w-4" />
+          <UserRound className="h-3.5 w-3.5" />
         )}
       </div>
+      <p className="max-w-24 truncate text-xs font-medium text-gray-900 dark:text-gray-100">{name}</p>
     </div>
   );
 }
@@ -267,6 +265,7 @@ function CategorySelect({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [openUp, setOpenUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = categories.find((category) => category.id === value);
 
@@ -279,17 +278,25 @@ function CategorySelect({
   }, []);
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative z-[70]">
       <button
         type="button"
-        onClick={() => setOpen((next) => !next)}
+        onClick={() => {
+          if (!open && ref.current) {
+            const rect = ref.current.getBoundingClientRect();
+            setOpenUp(rect.bottom + 240 > window.innerHeight);
+          }
+          setOpen((next) => !next);
+        }}
         className={`${selectControlClass} flex items-center justify-between text-left`}
       >
         <span className="truncate">{selected?.title ?? categories[0]?.title ?? ''}</span>
         <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-500 transition-transform dark:text-gray-300 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="relative z-[70] mt-2 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+        <div className={`absolute left-0 right-0 z-[90] max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800 ${
+          openUp ? 'bottom-full mb-2' : 'top-full mt-2'
+        }`}>
           {categories.map((category) => {
             const selectedOption = category.id === value;
             return (
@@ -1403,20 +1410,13 @@ export default function Categories() {
           onClick={(e) => e.stopPropagation()}
           className="relative bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
         >
-          <div className="mb-6 flex items-center justify-between gap-4">
+          <div className="mb-6 flex items-center gap-3">
             <div className="flex items-center gap-3">
               <Download className="h-5 w-5 text-gray-900 dark:text-gray-100" />
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.importShare}</h2>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsImportingShare(false)}
-              className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-zinc-700 dark:hover:text-gray-100"
-            >
-              <X className="h-4 w-4" />
-            </button>
           </div>
 
           {!loadedShare && (
