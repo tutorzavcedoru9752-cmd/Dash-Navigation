@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router';
-import { ChevronDown, Languages, Loader2, Lock, LogOut, Mail, Moon, Sun, UserRound } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Languages, Loader2, Lock, LogOut, Mail, Moon, Sun, UserRound } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import Home from './components/Home';
 import Categories from './components/Categories';
@@ -134,7 +134,7 @@ function ModeControls() {
         onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
         title={lang === 'en' ? '切换为中文' : 'Switch to English'}
         aria-label={lang === 'en' ? 'Switch to Chinese' : '切换为英文'}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:ring-zinc-600"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-900 dark:text-gray-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:ring-zinc-600"
       >
         <Languages className="h-4.5 w-4.5" />
       </button>
@@ -143,7 +143,7 @@ function ModeControls() {
         onClick={toggleDark}
         title={isDark ? (lang === 'en' ? 'Light mode' : '浅色模式') : (lang === 'en' ? 'Dark mode' : '深色模式')}
         aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:ring-zinc-600"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-900 dark:text-gray-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:ring-zinc-600"
       >
         {isDark ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
       </button>
@@ -214,7 +214,9 @@ function NavBar() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [profileStatus, setProfileStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [profileToast, setProfileToast] = useState<{ status: 'saving' | 'done' | 'error'; msg: string } | null>(null);
   const accountRef = useRef<HTMLDivElement>(null);
+  const profileToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isActive = (path: string) => location.pathname === path;
   const labels = NAV_LABELS[lang];
@@ -236,15 +238,29 @@ function NavBar() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  useEffect(() => () => {
+    if (profileToastTimer.current) clearTimeout(profileToastTimer.current);
+  }, []);
+
+  const showProfileToast = (status: 'saving' | 'done' | 'error', msg: string, autoHide = true) => {
+    if (profileToastTimer.current) clearTimeout(profileToastTimer.current);
+    setProfileToast({ status, msg });
+    if (autoHide) {
+      profileToastTimer.current = setTimeout(() => setProfileToast(null), 1500);
+    }
+  };
+
   const handleProfileBlur = async () => {
     const nextName = displayName.trim() || getFallbackName(session);
     if (nextName === name || profileStatus === 'saving') return;
 
     setProfileStatus('saving');
+    showProfileToast('saving', accountLabels.saving, false);
     const result = await updateProfile({
       display_name: nextName,
     });
     setProfileStatus(result.error ? 'error' : 'saved');
+    showProfileToast(result.error ? 'error' : 'done', result.error ? accountLabels.profileError : accountLabels.saved);
     if (!result.error) {
       window.setTimeout(() => setProfileStatus('idle'), 1400);
     }
@@ -309,13 +325,6 @@ function NavBar() {
                       className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-sm text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
                     />
                   </label>
-                  {profileStatus === 'saving' && <p className="text-xs text-gray-500 dark:text-gray-400">{accountLabels.saving}</p>}
-                  {profileStatus === 'saved' && <p className="text-xs text-green-600 dark:text-green-400">{accountLabels.saved}</p>}
-                  {profileStatus === 'error' && (
-                    <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
-                      {accountLabels.profileError}
-                    </p>
-                  )}
                   <div className="flex items-center justify-end gap-3 pt-1">
                     <button
                       type="button"
@@ -331,6 +340,20 @@ function NavBar() {
             )}
           </div>
         </div>
+      </div>
+      <div className={`fixed bottom-6 right-6 z-[70] flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg transition-all duration-300 pointer-events-none ${
+        profileToast === null ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
+      } ${
+        profileToast?.status === 'error'
+          ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200'
+          : 'bg-gray-900 text-white dark:bg-blue-950'
+      }`}>
+        {profileToast?.status === 'saving' ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <CheckCircle2 className="h-4 w-4" />
+        )}
+        <span>{profileToast?.msg ?? ''}</span>
       </div>
     </nav>
   );
@@ -528,44 +551,55 @@ function AuthScreen({ notice }: { notice?: string }) {
           </button>
         </form>
 
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-          {mode === 'sign-in' && (
-            <>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {mode === 'sign-in' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => switchMode('sign-up')}
+                  className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+                >
+                  {t.switchToSignUp}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchMode('forgot-password')}
+                  className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+                >
+                  {t.forgotPassword}
+                </button>
+              </>
+            )}
+            {mode === 'sign-up' && (
               <button
                 type="button"
-                onClick={() => switchMode('sign-up')}
+                onClick={() => switchMode('sign-in')}
                 className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
               >
-                {t.switchToSignUp}
+                {t.switchToSignIn}
               </button>
-              <button
-                type="button"
-                onClick={() => switchMode('forgot-password')}
-                className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-              >
-                {t.forgotPassword}
-              </button>
-            </>
-          )}
-          {mode === 'sign-up' && (
-            <button
-              type="button"
-              onClick={() => switchMode('sign-in')}
-              className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-            >
-              {t.switchToSignIn}
-            </button>
-          )}
-          {mode === 'verify-sign-up' && (
-            <>
-              <button
-                type="button"
-                onClick={handleResendCode}
-                disabled={submitting || !email}
-                className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-              >
-                {t.resendCode}
-              </button>
+            )}
+            {mode === 'verify-sign-up' && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={submitting || !email}
+                  className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+                >
+                  {t.resendCode}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchMode('sign-in')}
+                  className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+                >
+                  {t.backToSignIn}
+                </button>
+              </>
+            )}
+            {mode === 'forgot-password' && (
               <button
                 type="button"
                 onClick={() => switchMode('sign-in')}
@@ -573,20 +607,8 @@ function AuthScreen({ notice }: { notice?: string }) {
               >
                 {t.backToSignIn}
               </button>
-            </>
-          )}
-          {mode === 'forgot-password' && (
-            <button
-              type="button"
-              onClick={() => switchMode('sign-in')}
-              className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-            >
-              {t.backToSignIn}
-            </button>
-          )}
-        </div>
-
-        <div className="mt-5 flex justify-end">
+            )}
+          </div>
           <ModeControls />
         </div>
       </section>

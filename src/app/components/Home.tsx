@@ -712,7 +712,7 @@ export default function Home() {
                         onPointerEnter={() => preconnectTo(item.url)}
                         onFocus={() => preconnectTo(item.url)}
                         onTouchStart={() => preconnectTo(item.url)}
-                        className={`min-h-[92px] bg-white dark:bg-zinc-800 p-4 rounded-lg shadow-sm border hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex items-center gap-3 ${
+                        className={`min-h-[100px] bg-white dark:bg-zinc-800 p-4 rounded-lg shadow-sm border hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex items-center gap-3 ${
                           highlightedSiteId === item.id
                             ? 'border-blue-400 ring-2 ring-blue-300 shadow-blue-100 dark:border-sky-300 dark:bg-sky-400/10 dark:ring-sky-400/35 dark:shadow-sky-950/30'
                             : 'border-transparent dark:border-zinc-700 hover:border-gray-300 dark:hover:border-gray-600'
@@ -726,7 +726,7 @@ export default function Home() {
                           />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate" title={item.name}>{item.name}</p>
+                          <p className="text-base font-semibold leading-[22px] text-gray-900 dark:text-gray-100 truncate" title={item.name}>{item.name}</p>
                           <p className="text-xs text-gray-500 dark:text-gray-400 tracking-wide truncate" title={item.description}>{item.description}</p>
                         </div>
                       </motion.a>

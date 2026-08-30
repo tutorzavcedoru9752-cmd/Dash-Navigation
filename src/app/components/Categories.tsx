@@ -240,6 +240,65 @@ function SiteFavicon({ item }: { item: Pick<LinkItem, 'name' | 'icon' | 'favicon
   return itemIconMap[item.icon] || <BookOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" />;
 }
 
+function CategorySelect({
+  categories,
+  value,
+  onChange,
+}: {
+  categories: Array<{ id: string; title: string }>;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = categories.find((category) => category.id === value);
+
+  useEffect(() => {
+    const close = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((next) => !next)}
+        className={`${selectControlClass} flex items-center justify-between text-left`}
+      >
+        <span className="truncate">{selected?.title ?? categories[0]?.title ?? ''}</span>
+        <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-500 transition-transform dark:text-gray-300 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-[70] mt-2 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+          {categories.map((category) => {
+            const selectedOption = category.id === value;
+            return (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => {
+                  onChange(category.id);
+                  setOpen(false);
+                }}
+                className={`w-full px-4 py-2.5 text-left text-base transition-colors ${
+                  selectedOption
+                    ? 'bg-gray-100 text-gray-900 dark:bg-zinc-700 dark:text-gray-100'
+                    : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-zinc-700'
+                }`}
+              >
+                {category.title}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Categories() {
   const { lang, setLang } = useContext(LangContext);
   const { isDark, toggleDark } = useContext(ThemeContext);
@@ -547,6 +606,7 @@ export default function Categories() {
       document.body.removeChild(textarea);
     }
     finishToast(t.toastShareCopied);
+    setIsSharingCategory(false);
   };
 
   const openImportModal = () => {
@@ -1115,20 +1175,11 @@ export default function Categories() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.category}</label>
-              <div className="relative">
-                <select
-                  value={formData.categoryId || selectedCategoryId}
-                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                  className={selectControlClass}
-                >
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.title}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-300" />
-              </div>
+              <CategorySelect
+                categories={categories}
+                value={formData.categoryId || selectedCategoryId}
+                onChange={(categoryId) => setFormData({ ...formData, categoryId })}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.description}</label>
@@ -1205,7 +1256,7 @@ export default function Categories() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
-                      <p className="truncate text-xs text-gray-500 dark:text-gray-400">{hostnameFor(item.url)}</p>
+                      <p className="truncate text-xs tracking-wide text-gray-500 dark:text-gray-400">{item.description || hostnameFor(item.url)}</p>
                     </div>
                     <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${
                       selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-gray-300 dark:border-zinc-500'
@@ -1274,14 +1325,11 @@ export default function Categories() {
           onClick={(e) => e.stopPropagation()}
           className="relative bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
         >
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-900 dark:bg-zinc-700 dark:text-gray-100">
-                <Download className="h-5 w-5" />
-              </div>
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Download className="h-5 w-5 text-gray-900 dark:text-gray-100" />
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.importShare}</h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t.loadShareCode}</p>
               </div>
             </div>
             <button
@@ -1332,7 +1380,7 @@ export default function Categories() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
-                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">{hostnameFor(item.url)}</p>
+                        <p className="truncate text-xs tracking-wide text-gray-500 dark:text-gray-400">{item.description || hostnameFor(item.url)}</p>
                       </div>
                       <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${
                         selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-gray-300 dark:border-zinc-500'
@@ -1346,55 +1394,71 @@ export default function Categories() {
 
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.importTo}</p>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <div className="relative min-w-0 flex-1 sm:max-w-xs">
-                    <select
-                      value={importCategoryId}
-                      onChange={(e) => setImportCategoryId(e.target.value)}
-                      disabled={importTargetMode === 'new'}
-                      className={`${selectControlClass} disabled:cursor-not-allowed disabled:opacity-55`}
-                    >
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.id}>{category.title}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-300" />
-                  </div>
+                <div className="flex items-center gap-5 border-b border-gray-200 dark:border-zinc-700">
                   <button
                     type="button"
-                    onClick={() => setImportTargetMode(importTargetMode === 'new' ? 'existing' : 'new')}
-                    className={`flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-all ${
-                      importTargetMode === 'new'
-                        ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-200 dark:hover:bg-zinc-600'
-                        : 'border-2 border-dashed border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50 dark:border-zinc-600 dark:text-gray-300 dark:hover:border-gray-500 dark:hover:bg-zinc-700'
+                    onClick={() => setImportTargetMode('existing')}
+                    className={`pb-2 text-sm font-medium transition-colors ${
+                      importTargetMode === 'existing'
+                        ? 'border-b-2 border-gray-900 text-gray-900 dark:border-zinc-100 dark:text-gray-100'
+                        : 'border-b-2 border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
                     }`}
                   >
-                    <Plus className="h-4 w-4" />
-                    {importTargetMode === 'new' ? t.existingCategory : t.createCategory}
+                    {t.existingCategory}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportTargetMode('new')}
+                    className={`pb-2 text-sm font-medium transition-colors ${
+                      importTargetMode === 'new'
+                        ? 'border-b-2 border-gray-900 text-gray-900 dark:border-zinc-100 dark:text-gray-100'
+                        : 'border-b-2 border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+                    }`}
+                  >
+                    {t.newCategory}
                   </button>
                 </div>
 
+                {importTargetMode === 'existing' && (
+                  <div className="min-w-0 sm:max-w-sm">
+                    <CategorySelect
+                      categories={categories}
+                      value={importCategoryId}
+                      onChange={setImportCategoryId}
+                    />
+                  </div>
+                )}
+
                 {importTargetMode === 'new' && (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <input
-                      value={importNewCategory.id}
-                      onChange={(e) => setImportNewCategory({ ...importNewCategory, id: e.target.value })}
-                      placeholder={t.categoryIdPlaceholder}
-                      className="rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
-                    />
-                    <input
-                      value={importNewCategory.title}
-                      onChange={(e) => setImportNewCategory({ ...importNewCategory, title: e.target.value })}
-                      placeholder={t.categoryTitlePlaceholder}
-                      className="rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
-                    />
-                    <textarea
-                      value={importNewCategory.description}
-                      onChange={(e) => setImportNewCategory({ ...importNewCategory, description: e.target.value })}
-                      placeholder={t.descriptionPlaceholder}
-                      rows={2}
-                      className="rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 md:col-span-2 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
-                    />
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.categoryId}</span>
+                      <input
+                        value={importNewCategory.id}
+                        onChange={(e) => setImportNewCategory({ ...importNewCategory, id: e.target.value })}
+                        placeholder={t.categoryIdPlaceholder}
+                        className="mt-1.5 w-full rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.categoryTitle}</span>
+                      <input
+                        value={importNewCategory.title}
+                        onChange={(e) => setImportNewCategory({ ...importNewCategory, title: e.target.value })}
+                        placeholder={t.categoryTitlePlaceholder}
+                        className="mt-1.5 w-full rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                      />
+                    </label>
+                    <label className="block md:col-span-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.description}</span>
+                      <textarea
+                        value={importNewCategory.description}
+                        onChange={(e) => setImportNewCategory({ ...importNewCategory, description: e.target.value })}
+                        placeholder={t.descriptionPlaceholder}
+                        rows={2}
+                        className="mt-1.5 w-full rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                      />
+                    </label>
                   </div>
                 )}
               </div>
