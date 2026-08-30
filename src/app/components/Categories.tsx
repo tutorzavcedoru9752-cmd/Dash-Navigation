@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useRef } from 'react';
-import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, RefreshCw, Languages, Sun, Moon, Mail, Share2, Download, Check, KeyRound, Clock3 } from 'lucide-react';
+import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, RefreshCw, Languages, Sun, Moon, Mail, Share2, Download, Check, KeyRound, Clock3, UserRound } from 'lucide-react';
 import { fetchFaviconData, useCategories, type LinkItem, type NavShare } from '../hooks/useCategories';
 import { motion } from 'motion/react';
 import { LangContext, ThemeContext } from '../App';
@@ -231,13 +231,30 @@ function SiteFavicon({ item }: { item: Pick<LinkItem, 'name' | 'icon' | 'favicon
         className="h-full w-full object-contain"
         loading="lazy"
         decoding="async"
-        fetchPriority="low"
+        fetchpriority="low"
         onError={() => setFailed(true)}
       />
     );
   }
 
   return itemIconMap[item.icon] || <BookOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" />;
+}
+
+function ShareAuthor({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
+  return (
+    <div className="flex flex-shrink-0 items-center gap-2 text-right">
+      <div className="min-w-0">
+        <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">{name}</p>
+      </div>
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950">
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <UserRound className="h-4 w-4" />
+        )}
+      </div>
+    </div>
+  );
 }
 
 function CategorySelect({
@@ -272,7 +289,7 @@ function CategorySelect({
         <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-500 transition-transform dark:text-gray-300 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute left-0 right-0 top-full z-[70] mt-2 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+        <div className="relative z-[70] mt-2 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
           {categories.map((category) => {
             const selectedOption = category.id === value;
             return (
@@ -313,6 +330,7 @@ export default function Categories() {
     createCategory,
     createShare,
     getShare,
+    deleteShare,
     importSharedLinks,
     migrateFavicons,
   } = useCategories();
@@ -330,7 +348,7 @@ export default function Categories() {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [isSharingCategory, setIsSharingCategory] = useState(false);
   const [shareSelectedIds, setShareSelectedIds] = useState<Set<string>>(new Set());
-  const [shareResult, setShareResult] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [shareResult, setShareResult] = useState<{ code: string; expiresAt: string; sharerName: string; sharerAvatarUrl?: string } | null>(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [isImportingShare, setIsImportingShare] = useState(false);
   const [importCode, setImportCode] = useState('');
@@ -591,6 +609,17 @@ export default function Categories() {
     }
   };
 
+  const closeShareModal = async (keepShareCode = false) => {
+    const codeToDelete = !keepShareCode ? shareResult?.code : undefined;
+    setIsSharingCategory(false);
+    setShareResult(null);
+    setShareSelectedIds(new Set());
+
+    if (codeToDelete) {
+      await deleteShare(codeToDelete);
+    }
+  };
+
   const handleCopyShareCode = async () => {
     if (!shareResult) return;
     try {
@@ -606,7 +635,7 @@ export default function Categories() {
       document.body.removeChild(textarea);
     }
     finishToast(t.toastShareCopied);
-    setIsSharingCategory(false);
+    await closeShareModal(true);
   };
 
   const openImportModal = () => {
@@ -626,14 +655,11 @@ export default function Categories() {
       return;
     }
 
-    const existingUrls = new Set(
-      categories.flatMap((category) => category.items.map((item) => normalizeUrlForCompare(item.url)))
-    );
     const seenShareUrls = new Set<string>();
     let duplicateCount = 0;
     const uniqueLinks = share.links.filter((item) => {
       const key = normalizeUrlForCompare(item.url);
-      if (!key || existingUrls.has(key) || seenShareUrls.has(key)) {
+      if (!key || seenShareUrls.has(key)) {
         duplicateCount += 1;
         return false;
       }
@@ -668,13 +694,31 @@ export default function Categories() {
       if (!created) return;
     }
 
-    const links = loadedShare.links.filter((item) => importSelectedIds.has(item.id));
+    const selectedLinks = loadedShare.links.filter((item) => importSelectedIds.has(item.id));
+    const targetCategory = categories.find((category) => category.id === targetCategoryId);
+    const existingUrls = new Set((targetCategory?.items ?? []).map((item) => normalizeUrlForCompare(item.url)));
+    let duplicateCount = 0;
+    const links = selectedLinks.filter((item) => {
+      const key = normalizeUrlForCompare(item.url);
+      if (!key || existingUrls.has(key)) {
+        duplicateCount += 1;
+        return false;
+      }
+      existingUrls.add(key);
+      return true;
+    });
+
+    if (links.length === 0) {
+      finishToast(duplicateCount > 0 ? t.toastDuplicatesRemoved(duplicateCount) : t.selectAtLeastOne);
+      return;
+    }
+
     startToast(t.toastSaving);
     const imported = await importSharedLinks(targetCategoryId, links);
     if (imported) {
       setSelectedCategoryId(targetCategoryId);
       setIsImportingShare(false);
-      finishToast(t.toastImported);
+      finishToast(duplicateCount > 0 ? t.toastDuplicatesRemoved(duplicateCount) : t.toastImported);
     }
   };
 
@@ -1220,7 +1264,7 @@ export default function Categories() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={() => setIsSharingCategory(false)}
+          onClick={() => { void closeShareModal(); }}
           className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         />
         <motion.div
@@ -1245,7 +1289,7 @@ export default function Categories() {
                     key={item.id}
                     type="button"
                     onClick={() => setShareSelectedIds((current) => toggleSetValue(current, item.id))}
-                    className={`flex min-h-[88px] items-center gap-3 rounded-lg border p-3 text-left transition ${
+                    className={`flex min-h-[88px] items-center gap-3 rounded-lg border py-3 pl-3 pr-3.5 text-left transition ${
                       selected
                         ? 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
                         : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500'
@@ -1271,11 +1315,12 @@ export default function Categories() {
 
           {shareResult && (
             <div className="mt-5 rounded-lg bg-gray-100 p-4 dark:bg-zinc-700">
-              <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.shareCode}</p>
                   <p className="mt-1 font-mono text-2xl font-semibold tracking-widest text-gray-900 dark:text-gray-100">{shareResult.code}</p>
                 </div>
+                <ShareAuthor name={shareResult.sharerName} avatarUrl={shareResult.sharerAvatarUrl} />
               </div>
               <p className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                 <Clock3 className="h-3.5 w-3.5" />
@@ -1287,7 +1332,7 @@ export default function Categories() {
           <div className="mt-6 flex justify-end gap-3">
             <button
               type="button"
-              onClick={() => setIsSharingCategory(false)}
+              onClick={() => { void closeShareModal(); }}
               className="px-5 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
             >
               <X className="w-4 h-4" />
@@ -1354,11 +1399,14 @@ export default function Categories() {
 
           {loadedShare && (
             <div className="mt-5 space-y-5">
-              <div className="flex flex-col gap-1 rounded-lg bg-gray-100 p-4 dark:bg-zinc-700">
-                <p className="font-semibold text-gray-900 dark:text-gray-100">{loadedShare.categoryTitle}</p>
-                {loadedShare.categoryDescription && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{loadedShare.categoryDescription}</p>
-                )}
+              <div className="flex items-start justify-between gap-4 rounded-lg bg-gray-100 p-4 dark:bg-zinc-700">
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{loadedShare.categoryTitle}</p>
+                  {loadedShare.categoryDescription && (
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{loadedShare.categoryDescription}</p>
+                  )}
+                </div>
+                <ShareAuthor name={loadedShare.sharerName} avatarUrl={loadedShare.sharerAvatarUrl} />
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1369,7 +1417,7 @@ export default function Categories() {
                       key={item.id}
                       type="button"
                       onClick={() => setImportSelectedIds((current) => toggleSetValue(current, item.id))}
-                      className={`flex min-h-[88px] items-center gap-3 rounded-lg border p-3 text-left transition ${
+                      className={`flex min-h-[88px] items-center gap-3 rounded-lg border py-3 pl-3 pr-3.5 text-left transition ${
                         selected
                           ? 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
                           : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500'

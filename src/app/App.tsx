@@ -533,7 +533,7 @@ function AuthScreen({ notice }: { notice?: string }) {
                 value={verificationCode}
                 onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
                 placeholder={t.verificationCodePlaceholder}
-                className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-center font-mono text-lg tracking-[0.35em] text-gray-900 outline-none ring-1 ring-transparent transition placeholder:text-sm placeholder:tracking-normal focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
+                className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-center text-sm text-gray-900 outline-none ring-1 ring-transparent transition placeholder:text-sm focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
               />
             </label>
           )}

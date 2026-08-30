@@ -25,6 +25,8 @@ export interface NavShare {
   categoryDescription: string;
   links: LinkItem[];
   expiresAt: string;
+  sharerName: string;
+  sharerAvatarUrl?: string;
 }
 
 type NavCategoryRow = {
@@ -455,6 +457,13 @@ export function useCategories() {
       const links = category.items.filter((item) => linkIds.includes(item.id));
       if (links.length === 0) throw new Error('Select at least one site to share.');
 
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('display_name, avatar_url')
+        .eq('id', userId)
+        .maybeSingle();
+      const sharerName = (profileRow?.display_name as string | undefined)?.trim() || 'Dash user';
+      const sharerAvatarUrl = (profileRow?.avatar_url as string | null | undefined) || '';
       const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
       const payload = links.map((item) => ({
         id: item.id,
@@ -463,6 +472,8 @@ export function useCategories() {
         description: item.description,
         icon: item.icon,
         faviconUrl: item.faviconUrl ?? '',
+        shareAuthorName: sharerName,
+        shareAuthorAvatarUrl: sharerAvatarUrl || null,
       }));
 
       for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -481,7 +492,12 @@ export function useCategories() {
           .single();
 
         if (!insertError && data) {
-          return { code: data.code as string, expiresAt: data.expires_at as string };
+          return {
+            code: data.code as string,
+            expiresAt: data.expires_at as string,
+            sharerName,
+            sharerAvatarUrl: sharerAvatarUrl || undefined,
+          };
         }
 
         if (insertError?.code !== '23505') {
@@ -507,18 +523,43 @@ export function useCategories() {
 
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) return null;
+      const links = (row.links ?? []) as Array<LinkItem & { shareAuthorName?: string; shareAuthorAvatarUrl?: string | null }>;
+      const firstSharedLink = links[0];
 
       return {
         code: row.code,
         categoryTitle: row.category_title,
         categoryDescription: row.category_description ?? '',
-        links: (row.links ?? []) as LinkItem[],
+        links,
         expiresAt: row.expires_at,
+        sharerName: row.sharer_name || firstSharedLink?.shareAuthorName || 'Dash user',
+        sharerAvatarUrl: row.sharer_avatar_url || firstSharedLink?.shareAuthorAvatarUrl || undefined,
       };
     } catch (err) {
       console.error('Error loading share code:', err);
       setError(err instanceof Error ? err.message : String(err));
       return null;
+    }
+  };
+
+  const deleteShare = async (code: string) => {
+    try {
+      const userId = await getCurrentUserId();
+      const normalizedCode = normalizeShareCode(code);
+      if (!userId || !normalizedCode) return false;
+
+      const { error: deleteError } = await supabase
+        .from('nav_shares')
+        .delete()
+        .eq('owner_id', userId)
+        .eq('code', normalizedCode);
+
+      if (deleteError) throw deleteError;
+      return true;
+    } catch (err) {
+      console.error('Error deleting share code:', err);
+      setError(err instanceof Error ? err.message : String(err));
+      return false;
     }
   };
 
@@ -590,6 +631,7 @@ export function useCategories() {
     createCategory,
     createShare,
     getShare,
+    deleteShare,
     importSharedLinks,
     refreshCategories: fetchCategories,
     migrateFavicons,
