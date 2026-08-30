@@ -216,6 +216,30 @@ const itemIconMap: Record<string, React.ReactNode> = {
 const primaryButtonClass = 'rounded-lg bg-gray-900 text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700';
 const selectControlClass = 'w-full appearance-none rounded-lg border-none bg-gray-100 py-3 pl-3 pr-11 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600';
 
+function SiteFavicon({ item }: { item: Pick<LinkItem, 'name' | 'icon' | 'faviconUrl'> }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [item.faviconUrl]);
+
+  if (item.faviconUrl && !failed) {
+    return (
+      <img
+        src={item.faviconUrl}
+        alt={`${item.name} favicon`}
+        className="h-full w-full object-contain"
+        loading="lazy"
+        decoding="async"
+        fetchPriority="low"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return itemIconMap[item.icon] || <BookOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" />;
+}
+
 export default function Categories() {
   const { lang, setLang } = useContext(LangContext);
   const { isDark, toggleDark } = useContext(ThemeContext);
@@ -811,11 +835,7 @@ export default function Categories() {
                 <div>
                   <div className="flex justify-between items-start mb-2 md:mb-3">
                     <div className="w-9 h-9 md:w-12 md:h-12 rounded-lg bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 flex items-center justify-center overflow-hidden p-1.5 md:p-2 flex-shrink-0">
-                      {item.faviconUrl ? (
-                        <img src={item.faviconUrl} alt={`${item.name} favicon`} className="w-full h-full object-contain" />
-                      ) : (
-                        itemIconMap[item.icon] || <BookOpen className="w-5 h-5 text-gray-700" />
-                      )}
+                      <SiteFavicon item={item} />
                     </div>
                     <div className={`flex gap-0.5 transition-opacity ${activeCardId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                       <button
@@ -1181,11 +1201,7 @@ export default function Categories() {
                     }`}
                   >
                     <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
-                      {item.faviconUrl ? (
-                        <img src={item.faviconUrl} alt="" className="h-full w-full object-contain" />
-                      ) : (
-                        itemIconMap[item.icon] || <BookOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                      )}
+                      <SiteFavicon item={item} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
@@ -1312,11 +1328,7 @@ export default function Categories() {
                       }`}
                     >
                       <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
-                        {item.faviconUrl ? (
-                          <img src={item.faviconUrl} alt="" className="h-full w-full object-contain" />
-                        ) : (
-                          itemIconMap[item.icon] || <BookOpen className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                        )}
+                        <SiteFavicon item={item} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>

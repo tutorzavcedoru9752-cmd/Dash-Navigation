@@ -248,21 +248,24 @@ export function useCategories() {
         return;
       }
 
-      const { data: categoryRows, error: categoryError } = await supabase
-        .from('nav_categories')
-        .select('id, title, description, order_index')
-        .order('order_index', { ascending: true })
-        .order('title', { ascending: true });
+      const [categoriesResult, linksResult] = await Promise.all([
+        supabase
+          .from('nav_categories')
+          .select('id, title, description, order_index')
+          .order('order_index', { ascending: true })
+          .order('title', { ascending: true }),
+        supabase
+          .from('nav_links')
+          .select('id, category_id, name, url, description, icon, favicon_url, order_index')
+          .order('order_index', { ascending: true })
+          .order('name', { ascending: true }),
+      ]);
 
-      if (categoryError) throw categoryError;
+      if (categoriesResult.error) throw categoriesResult.error;
+      if (linksResult.error) throw linksResult.error;
 
-      const { data: linkRows, error: linkError } = await supabase
-        .from('nav_links')
-        .select('id, category_id, name, url, description, icon, favicon_url, order_index')
-        .order('order_index', { ascending: true })
-        .order('name', { ascending: true });
-
-      if (linkError) throw linkError;
+      const categoryRows = categoriesResult.data;
+      const linkRows = linksResult.data;
 
       if ((categoryRows ?? []).length === 0) {
         const { data: profileRow, error: profileError } = await supabase
@@ -278,41 +281,47 @@ export function useCategories() {
           await fetchCategories();
           return;
         }
+
+        setCategories([]);
       } else {
-        const { data: profileRow, error: profileError } = await supabase
-          .from('profiles')
-          .select('default_seed_version')
-          .eq('id', userId)
-          .maybeSingle();
+        const nextCategories = (categoryRows ?? []).map((category) =>
+          toCategory(category as NavCategoryRow, (linkRows ?? []) as NavLinkRow[])
+        );
 
-        if (profileError) throw profileError;
+        setCategories(nextCategories);
 
-        if ((profileRow?.default_seed_version ?? 0) < DEFAULT_SEED_VERSION && isLegacyDefaultSeed(categoryRows as NavCategoryRow[], linkRows as NavLinkRow[])) {
-          const { error: deleteError } = await supabase
-            .from('nav_categories')
-            .delete()
-            .in('id', LEGACY_SEED_CATEGORY_IDS);
+        void (async () => {
+          const { data: profileRow, error: profileError } = await supabase
+            .from('profiles')
+            .select('default_seed_version')
+            .eq('id', userId)
+            .maybeSingle();
 
-          if (deleteError) throw deleteError;
-          await seedDefaultCategories(userId);
-          await fetchCategories();
-          return;
-        }
+          if (profileError) throw profileError;
 
-        if ((profileRow?.default_seed_version ?? 0) < DEFAULT_SEED_VERSION && isCurrentDefaultSeed(categoryRows as NavCategoryRow[], linkRows as NavLinkRow[])) {
-          await seedDefaultCategories(userId);
-          await fetchCategories();
-          return;
-        }
+          if ((profileRow?.default_seed_version ?? 0) < DEFAULT_SEED_VERSION && isLegacyDefaultSeed(categoryRows as NavCategoryRow[], linkRows as NavLinkRow[])) {
+            const { error: deleteError } = await supabase
+              .from('nav_categories')
+              .delete()
+              .in('id', LEGACY_SEED_CATEGORY_IDS);
 
-        void markDefaultsSeeded(userId);
+            if (deleteError) throw deleteError;
+            await seedDefaultCategories(userId);
+            await fetchCategories();
+            return;
+          }
+
+          if ((profileRow?.default_seed_version ?? 0) < DEFAULT_SEED_VERSION && isCurrentDefaultSeed(categoryRows as NavCategoryRow[], linkRows as NavLinkRow[])) {
+            await seedDefaultCategories(userId);
+            await fetchCategories();
+            return;
+          }
+
+          await markDefaultsSeeded(userId);
+        })().catch((backgroundError) => {
+          console.error('Error checking default navigation seed:', backgroundError);
+        });
       }
-
-      const nextCategories = (categoryRows ?? []).map((category) =>
-        toCategory(category as NavCategoryRow, (linkRows ?? []) as NavLinkRow[])
-      );
-
-      setCategories(nextCategories);
     } catch (err) {
       console.error('Error fetching categories:', err);
       setError(err instanceof Error ? err.message : String(err));

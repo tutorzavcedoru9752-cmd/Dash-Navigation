@@ -86,6 +86,60 @@ const categoryColorMap: Record<string, { bgColor: string; textColor: string }> =
   'Entertainment': { bgColor: 'bg-slate-200', textColor: 'text-slate-900' },
 };
 
+const preconnectedOrigins = new Set<string>();
+
+const addResourceHint = (rel: 'dns-prefetch' | 'preconnect', href: string) => {
+  if (document.head.querySelector(`link[rel="${rel}"][href="${href}"]`)) return;
+
+  const link = document.createElement('link');
+  link.rel = rel;
+  link.href = href;
+  if (rel === 'preconnect') link.crossOrigin = '';
+  document.head.appendChild(link);
+};
+
+const preconnectTo = (websiteUrl: string) => {
+  try {
+    const url = new URL(websiteUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+
+    const dnsHref = `//${url.hostname}`;
+    const origin = url.origin;
+    if (!preconnectedOrigins.has(dnsHref)) {
+      addResourceHint('dns-prefetch', dnsHref);
+      preconnectedOrigins.add(dnsHref);
+    }
+    if (url.protocol === 'https:' && !preconnectedOrigins.has(origin)) {
+      addResourceHint('preconnect', origin);
+      preconnectedOrigins.add(origin);
+    }
+  } catch {
+    // Invalid URLs are rejected by the editor before they reach the home page.
+  }
+};
+
+function FaviconImage({ src, alt, fallback }: { src?: string; alt: string; fallback: React.ReactNode }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (!src || failed) return <>{fallback}</>;
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      fetchPriority="low"
+      onError={() => setFailed(true)}
+      className="w-full h-full object-contain"
+    />
+  );
+}
+
 // FAB constants at module level to avoid stale closure issues
 const FAB_SIZE = 44;
 const FAB_MARGIN = 16;
@@ -96,6 +150,18 @@ interface WeatherData {
   weatherCode: number;
   city: string;
   cityEn: string;
+}
+
+async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 3500): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return await response.json() as T;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 export default function Home() {
@@ -393,8 +459,10 @@ export default function Home() {
 
   const getCityName = async (lat: number, lon: number, language: string) => {
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=${language}`);
-      const data = await response.json();
+      const data = await fetchJsonWithTimeout<{ address?: { city?: string; county?: string; state?: string } }>(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=${language}`,
+        3000
+      );
       return data.address?.city || data.address?.county || data.address?.state || (language === 'zh' ? '未知位置' : 'Unknown');
     } catch (error) {
       console.error('Error fetching city name:', error);
@@ -405,13 +473,13 @@ export default function Home() {
   useEffect(() => {
     const fetchWeatherByCoords = async (latitude: number, longitude: number) => {
       try {
-        // Fetch weather data from Open-Meteo API
-        const weatherResponse = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&timezone=auto`
+        const weatherData = await fetchJsonWithTimeout<{
+          current_weather: { temperature: number; weathercode: number };
+        }>(
+          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&timezone=auto`,
+          3000
         );
-        const weatherData = await weatherResponse.json();
 
-        // Get city name in both languages
         const [cityZh, cityEn] = await Promise.all([
           getCityName(latitude, longitude, 'zh'),
           getCityName(latitude, longitude, 'en'),
@@ -432,23 +500,18 @@ export default function Home() {
 
     const fetchWeatherByIP = async () => {
       try {
-        // Try multiple IP geolocation services
         let latitude, longitude;
 
         try {
-          const ipResponse = await fetch('https://ipapi.co/json/', { timeout: 3000 });
-          const ipData = await ipResponse.json();
+          const ipData = await fetchJsonWithTimeout<{ latitude?: number; longitude?: number }>('https://ipapi.co/json/', 2500);
           latitude = ipData.latitude;
           longitude = ipData.longitude;
         } catch {
-          // Fallback to ip-api.com
           try {
-            const ipResponse = await fetch('http://ip-api.com/json/');
-            const ipData = await ipResponse.json();
+            const ipData = await fetchJsonWithTimeout<{ lat?: number; lon?: number }>('http://ip-api.com/json/', 2500);
             latitude = ipData.lat;
             longitude = ipData.lon;
           } catch {
-            // If both fail, use Beijing as default
             latitude = 39.9042;
             longitude = 116.4074;
           }
@@ -457,12 +520,10 @@ export default function Home() {
         if (latitude && longitude) {
           await fetchWeatherByCoords(latitude, longitude);
         } else {
-          // Final fallback to Beijing
           await fetchWeatherByCoords(39.9042, 116.4074);
         }
       } catch (error) {
         console.log('Using default location (Beijing)');
-        // Final fallback to Beijing
         await fetchWeatherByCoords(39.9042, 116.4074);
       }
     };
@@ -489,7 +550,23 @@ export default function Home() {
       }
     };
 
-    fetchWeather();
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    let idleHandle: number | undefined;
+    const timeoutHandle = window.setTimeout(() => {
+      if (idleWindow.requestIdleCallback) {
+        idleHandle = idleWindow.requestIdleCallback(fetchWeather, { timeout: 2500 });
+      } else {
+        void fetchWeather();
+      }
+    }, 2500);
+
+    return () => {
+      if (idleHandle !== undefined) idleWindow.cancelIdleCallback?.(idleHandle);
+      window.clearTimeout(timeoutHandle);
+    };
   }, []);
 
   return (
@@ -632,6 +709,9 @@ export default function Home() {
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onPointerEnter={() => preconnectTo(item.url)}
+                        onFocus={() => preconnectTo(item.url)}
+                        onTouchStart={() => preconnectTo(item.url)}
                         className={`min-h-[92px] bg-white dark:bg-zinc-800 p-4 rounded-lg shadow-sm border hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex items-center gap-3 ${
                           highlightedSiteId === item.id
                             ? 'border-blue-400 ring-2 ring-blue-300 shadow-blue-100 dark:border-sky-300 dark:bg-sky-400/10 dark:ring-sky-400/35 dark:shadow-sky-950/30'
@@ -639,11 +719,11 @@ export default function Home() {
                         }`}
                       >
                         <div className="w-10 h-10 rounded-lg bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 flex items-center justify-center flex-shrink-0 overflow-hidden p-2">
-                          {item.faviconUrl ? (
-                            <img src={item.faviconUrl} alt={`${item.name} favicon`} className="w-full h-full object-contain" />
-                          ) : (
-                            iconMap[item.icon] || <Library className="w-6 h-6 text-gray-700 dark:text-gray-300" />
-                          )}
+                          <FaviconImage
+                            src={item.faviconUrl}
+                            alt={`${item.name} favicon`}
+                            fallback={iconMap[item.icon] || <Library className="w-6 h-6 text-gray-700 dark:text-gray-300" />}
+                          />
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate" title={item.name}>{item.name}</p>
@@ -757,11 +837,11 @@ export default function Home() {
                       <div className="relative flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-700 group transition-colors">
                         {/* 图标 */}
                         <div className="w-9 h-9 rounded-lg bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5">
-                          {site.faviconUrl ? (
-                            <img src={site.faviconUrl} alt="" className="w-full h-full object-contain" />
-                          ) : (
-                            <Library className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                          )}
+                          <FaviconImage
+                            src={site.faviconUrl}
+                            alt=""
+                            fallback={<Library className="w-4 h-4 text-gray-500 dark:text-gray-400" />}
+                          />
                         </div>
 
                         {/* 信息 */}
@@ -783,6 +863,9 @@ export default function Home() {
                             href={site.url}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onPointerEnter={() => preconnectTo(site.url)}
+                            onFocus={() => preconnectTo(site.url)}
+                            onTouchStart={() => preconnectTo(site.url)}
                             onClick={(e) => { e.stopPropagation(); setSiteSearchOpen(false); setSiteSearchQuery(''); }}
                             className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-600 transition-colors"
                             title={lang === 'en' ? 'Open site' : '打开网站'}
@@ -796,6 +879,9 @@ export default function Home() {
                           href={site.url}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onPointerEnter={() => preconnectTo(site.url)}
+                          onFocus={() => preconnectTo(site.url)}
+                          onTouchStart={() => preconnectTo(site.url)}
                           onClick={() => { setSiteSearchOpen(false); setSiteSearchQuery(''); }}
                           className="absolute inset-0"
                           aria-label={lang === 'en' ? `Open ${site.name}` : `打开 ${site.name}`}

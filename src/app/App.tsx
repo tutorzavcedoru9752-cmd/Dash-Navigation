@@ -776,7 +776,7 @@ export default function App() {
     supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
       if (!passwordRecovery) {
-        await ensureProfile(data.session);
+        void ensureProfile(data.session);
       }
       setAuthLoading(false);
     });
