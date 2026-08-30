@@ -2,7 +2,7 @@ import { useState, useEffect, useContext, useRef } from 'react';
 import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, RefreshCw, Languages, Sun, Moon, Mail, Share2, Download, Check, KeyRound, Clock3, UserRound } from 'lucide-react';
 import { fetchFaviconData, useCategories, type LinkItem, type NavShare } from '../hooks/useCategories';
 import { motion } from 'motion/react';
-import { LangContext, ThemeContext } from '../App';
+import { FREE_CATEGORY_LIMIT, FREE_LINK_LIMIT, LangContext, MembershipContext, ThemeContext } from '../App';
 
 const ui = {
   en: {
@@ -323,6 +323,7 @@ export default function Categories() {
   const {
     categories,
     loading,
+    error,
     addItem,
     updateItem,
     deleteItem,
@@ -334,6 +335,7 @@ export default function Categories() {
     importSharedLinks,
     migrateFavicons,
   } = useCategories();
+  const { summary, refreshMembership, openUpgradeDialog } = useContext(MembershipContext);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [editingItem, setEditingItem] = useState<{ id: string; name: string; url: string; description: string; categoryId: string } | null>(null);
@@ -343,7 +345,7 @@ export default function Categories() {
   const [formData, setFormData] = useState({ name: '', url: '', description: '', categoryId: '' });
   const [categoryFormData, setCategoryFormData] = useState({ id: '', title: '', description: '' });
   const [isRefreshingFavicons, setIsRefreshingFavicons] = useState(false);
-  const [toast, setToast] = useState<{ status: 'saving' | 'done'; msg: string } | null>(null);
+  const [toast, setToast] = useState<{ status: 'saving' | 'done' | 'error'; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [isSharingCategory, setIsSharingCategory] = useState(false);
@@ -358,6 +360,8 @@ export default function Categories() {
   const [importCategoryId, setImportCategoryId] = useState('');
   const [importNewCategory, setImportNewCategory] = useState({ id: '', title: '', description: '' });
   const selectedCategory = categories.find(c => c.id === selectedCategoryId);
+  const hasReachedCategoryLimit = summary.plan === 'free' && summary.categoryCount >= FREE_CATEGORY_LIMIT;
+  const hasReachedLinkLimit = summary.plan === 'free' && summary.linkCount >= FREE_LINK_LIMIT;
 
   const hostnameFor = (url: string) => {
     try {
@@ -412,9 +416,9 @@ export default function Categories() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ status: 'saving', msg });
   };
-  const finishToast = (msg: string) => {
+  const finishToast = (msg: string, status: 'done' | 'error' = 'done') => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast({ status: 'done', msg });
+    setToast({ status, msg });
     toastTimer.current = setTimeout(() => setToast(null), 1500);
   };
 
@@ -451,16 +455,22 @@ export default function Categories() {
     const randomIcon = iconOptions[Math.floor(Math.random() * iconOptions.length)];
     startToast(t.toastSaving);
     const faviconUrl = await fetchFaviconData(formData.url);
-    await addItem(targetCategoryId, {
+    const added = await addItem(targetCategoryId, {
       name: formData.name,
       url: formData.url,
       description: formData.description,
       icon: randomIcon,
       faviconUrl,
     });
+    if (!added) {
+      finishToast(hasReachedLinkLimit ? '免费用户最多可保存 30 个网站，请升级会员后继续添加。' : (error ?? t.toastUpdated), 'error');
+      if (hasReachedLinkLimit) openUpgradeDialog();
+      return;
+    }
     setSelectedCategoryId(targetCategoryId);
     setFormData({ name: '', url: '', description: '', categoryId: targetCategoryId });
     setIsAddingNew(false);
+    await refreshMembership();
     finishToast(t.toastAdded);
   };
 
@@ -484,14 +494,16 @@ export default function Categories() {
 
   const handleDeleteItem = async (itemId: string) => {
     startToast(t.toastSaving);
-    await deleteItem(selectedCategoryId, itemId);
-    finishToast(t.toastDeleted);
+      await deleteItem(selectedCategoryId, itemId);
+      await refreshMembership();
+      finishToast(t.toastDeleted);
   };
 
   const handleDeleteCategory = async () => {
     if (confirm(t.deleteCategoryConfirm(selectedCategory?.title ?? ''))) {
       startToast(t.toastSaving);
       await deleteCategory(selectedCategoryId);
+      await refreshMembership();
       const remainingCategories = categories.filter(c => c.id !== selectedCategoryId);
       if (remainingCategories.length > 0) {
         setSelectedCategoryId(remainingCategories[0].id);
@@ -507,6 +519,10 @@ export default function Categories() {
   };
 
   const startAddNew = () => {
+    if (hasReachedLinkLimit) {
+      openUpgradeDialog();
+      return;
+    }
     setIsAddingNew(true);
     setEditingItem(null);
     setFormData({ name: '', url: '', description: '', categoryId: selectedCategoryId });
@@ -532,9 +548,11 @@ export default function Categories() {
       setCategoryFormData({ id: '', title: '', description: '' });
       setIsCreatingCategory(false);
       setSelectedCategoryId(result.id);
+      await refreshMembership();
       finishToast(t.toastCreated);
     } else {
-      finishToast(t.toastUpdated);
+      finishToast(hasReachedCategoryLimit ? '免费用户最多可创建 5 个分类，请升级会员后继续创建。' : (error ?? t.toastUpdated), 'error');
+      if (hasReachedCategoryLimit) openUpgradeDialog();
     }
   };
 
@@ -571,6 +589,7 @@ export default function Categories() {
     if (result) {
       setEditingCategory(null);
       setCategoryFormData({ id: '', title: '', description: '' });
+      await refreshMembership();
       finishToast(t.toastUpdated);
     }
   };
@@ -691,7 +710,11 @@ export default function Categories() {
         description: importNewCategory.description,
         order: categories.length,
       });
-      if (!created) return;
+      if (!created) {
+        if (hasReachedCategoryLimit) openUpgradeDialog();
+        return;
+      }
+      await refreshMembership();
     }
 
     const selectedLinks = loadedShare.links.filter((item) => importSelectedIds.has(item.id));
@@ -709,7 +732,7 @@ export default function Categories() {
     });
 
     if (links.length === 0) {
-      finishToast(duplicateCount > 0 ? t.toastDuplicatesRemoved(duplicateCount) : t.selectAtLeastOne);
+      finishToast(duplicateCount > 0 ? t.toastDuplicatesRemoved(duplicateCount) : t.selectAtLeastOne, 'error');
       return;
     }
 
@@ -718,7 +741,11 @@ export default function Categories() {
     if (imported) {
       setSelectedCategoryId(targetCategoryId);
       setIsImportingShare(false);
+      await refreshMembership();
       finishToast(duplicateCount > 0 ? t.toastDuplicatesRemoved(duplicateCount) : t.toastImported);
+    } else if (hasReachedLinkLimit) {
+      finishToast('免费用户最多可保存 30 个网站，请升级会员后继续添加。', 'error');
+      openUpgradeDialog();
     }
   };
 
@@ -852,7 +879,13 @@ export default function Categories() {
             <hr className="my-3 md:my-4 border-gray-200 dark:border-zinc-700 flex-shrink-0" />
             <div className="grid grid-cols-3 gap-2 md:grid-cols-1">
               <button
-                onClick={() => setIsCreatingCategory(true)}
+                onClick={() => {
+                  if (hasReachedCategoryLimit) {
+                    openUpgradeDialog();
+                    return;
+                  }
+                  setIsCreatingCategory(true);
+                }}
                 className="flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-300 px-2 text-xs font-medium text-gray-600 transition-all hover:border-gray-400 hover:bg-gray-50 dark:border-zinc-600 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:bg-zinc-700 md:w-full md:gap-2 md:px-4 md:text-sm"
               >
                 <Plus className="h-4 w-4 flex-shrink-0" />
@@ -1540,7 +1573,9 @@ export default function Categories() {
     <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium transition-all duration-300 pointer-events-none ${
       toast === null ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
     } ${
-      toast?.status === 'done'
+      toast?.status === 'error'
+        ? 'bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 text-red-700 dark:text-red-300'
+        : toast?.status === 'done'
         ? 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-green-600 dark:text-green-400'
         : 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-gray-400'
     }`}>

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router';
-import { CheckCircle2, ChevronDown, Languages, Loader2, Lock, LogOut, Mail, Moon, Sun, UserRound } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Diamond, ExternalLink, Grid2X2, KeyRound, Languages, Loader2, Lock, LogOut, Mail, PanelTop, Pencil, Settings, Sparkles, Sun, Moon, UserRound, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import Home from './components/Home';
 import Categories from './components/Categories';
@@ -28,6 +28,30 @@ export const AuthContext = createContext<{
   updateProfile: (patch: ProfilePatch) => Promise<{ error?: string }>;
 }>({ session: null, profile: null, updateProfile: async () => ({}) });
 
+export type MembershipPlan = 'free' | 'lifetime';
+
+export type MembershipSummary = {
+  plan: MembershipPlan;
+  categoryCount: number;
+  linkCount: number;
+  loading: boolean;
+};
+
+export const FREE_CATEGORY_LIMIT = 5;
+export const FREE_LINK_LIMIT = 30;
+
+export const MembershipContext = createContext<{
+  summary: MembershipSummary;
+  refreshMembership: () => Promise<void>;
+  redeemMembershipCode: (code: string) => Promise<{ ok: boolean; status: string; message: string }>;
+  openUpgradeDialog: () => void;
+}>({
+  summary: { plan: 'free', categoryCount: 0, linkCount: 0, loading: true },
+  refreshMembership: async () => {},
+  redeemMembershipCode: async () => ({ ok: false, status: 'unavailable', message: '会员服务暂不可用。' }),
+  openUpgradeDialog: () => {},
+});
+
 type UserProfile = {
   id: string;
   display_name: string;
@@ -49,18 +73,52 @@ const ACCOUNT_LABELS = {
   en: {
     account: 'Account',
     displayName: 'Display name',
+    free: 'Free',
+    lifetime: 'Lifetime',
+    editAccount: 'Edit account',
+    setWallpaper: 'Set wallpaper',
+    upgrade: 'Upgrade',
+    comingSoon: 'Coming soon',
+    categories: 'Categories',
+    sites: 'Sites',
     saving: 'Saving...',
     saved: 'Saved',
     signOut: 'Sign out',
     profileError: 'Could not save profile. Please try again.',
+    upgradeTitle: 'Lifetime membership',
+    upgradePrice: '¥5.99',
+    upgradeSubtitle: 'Unlimited categories and sites. Custom avatar and wallpaper are reserved for the next release.',
+    buyOnXianyu: 'Buy on Xianyu',
+    redeemCode: 'Verify membership code',
+    codePlaceholder: 'JF-XXXX-XXXX-XXXX',
+    redeeming: 'Verifying...',
+    alreadyMember: 'Lifetime member',
+    invalidCode: 'Membership code is invalid or already used.',
   },
   zh: {
     account: '账号',
     displayName: '用户名',
+    free: 'Free',
+    lifetime: '终身会员',
+    editAccount: '编辑账号',
+    setWallpaper: '设置壁纸',
+    upgrade: '升级会员',
+    comingSoon: '即将上线',
+    categories: '分类',
+    sites: '网站',
     saving: '保存中...',
     saved: '已保存',
     signOut: '退出账号',
     profileError: '资料保存失败，请重试。',
+    upgradeTitle: '升级终身会员',
+    upgradePrice: '¥5.99',
+    upgradeSubtitle: '不限分类、不限网站数量。自定义头像和壁纸会在后续版本开放。',
+    buyOnXianyu: '去闲鱼购买',
+    redeemCode: '核验会员码',
+    codePlaceholder: 'JF-XXXX-XXXX-XXXX',
+    redeeming: '核验中...',
+    alreadyMember: '终身会员',
+    invalidCode: '会员码无效或已使用。',
   },
 };
 
@@ -122,6 +180,21 @@ type AuthMode = 'sign-in' | 'sign-up' | 'verify-sign-up' | 'forgot-password';
 function getFallbackName(session: Session | null) {
   return session?.user.email?.split('@')[0] || 'User';
 }
+
+const normalizeMembershipCodeInput = (value: string) => value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+
+const formatMembershipCodeInput = (value: string) => {
+  const normalized = normalizeMembershipCodeInput(value).slice(0, 14);
+  if (normalized.startsWith('JF')) {
+    const rest = normalized.slice(2);
+    const groups = [rest.slice(0, 4), rest.slice(4, 8), rest.slice(8, 12)].filter(Boolean);
+    return ['JF', ...groups].join('-');
+  }
+
+  return normalized.replace(/(.{4})/g, '$1-').replace(/-$/, '');
+};
+
+const isLifetimePlan = (plan: string | null | undefined): plan is 'lifetime' => plan === 'lifetime';
 
 function ModeControls() {
   const { lang, setLang } = useContext(LangContext);
@@ -211,7 +284,9 @@ function NavBar() {
   const location = useLocation();
   const { lang } = useContext(LangContext);
   const { session, profile, updateProfile } = useContext(AuthContext);
+  const { summary, openUpgradeDialog } = useContext(MembershipContext);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [accountPanel, setAccountPanel] = useState<'edit' | 'wallpaper'>('edit');
   const [displayName, setDisplayName] = useState('');
   const [profileStatus, setProfileStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [profileToast, setProfileToast] = useState<{ status: 'saving' | 'done' | 'error'; msg: string } | null>(null);
@@ -223,6 +298,10 @@ function NavBar() {
   const accountLabels = ACCOUNT_LABELS[lang];
   const email = session?.user.email ?? '';
   const name = profile?.display_name || getFallbackName(session);
+  const isLifetime = summary.plan === 'lifetime';
+  const planLabel = isLifetime ? accountLabels.lifetime : accountLabels.free;
+  const categoryUsage = isLifetime ? '∞' : `${summary.categoryCount}/${FREE_CATEGORY_LIMIT}`;
+  const linkUsage = isLifetime ? '∞' : `${summary.linkCount}/${FREE_LINK_LIMIT}`;
 
   useEffect(() => {
     setDisplayName(name);
@@ -305,36 +384,101 @@ function NavBar() {
               <UserRound className="h-4 w-4" />
             </button>
             {accountOpen && (
-              <div className="absolute right-0 top-full mt-3 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950 dark:text-white">
-                    <UserRound className="h-5 w-5" />
+              <div className="absolute right-0 top-full mt-3 w-[min(24.5rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white p-8 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+                <div className="mb-5 flex items-center gap-5">
+                  <div className="flex h-[60px] w-[60px] flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950 dark:text-white">
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <UserRound className="h-8 w-8" />
+                    )}
                   </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{name}</p>
-                    <p className="truncate text-xs text-gray-500 dark:text-gray-400">{email}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="truncate text-[20px] font-semibold leading-6 text-gray-950 dark:text-gray-100">{name}</p>
+                      <span className={`inline-flex h-5 flex-shrink-0 items-center rounded-full px-3 text-[13px] font-medium leading-5 ${
+                        isLifetime
+                          ? 'bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950'
+                          : 'bg-gray-200 text-gray-600 dark:bg-zinc-700 dark:text-zinc-300'
+                      }`}>
+                        {planLabel}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-[17px] leading-[22px] text-gray-500 dark:text-gray-400">{email}</p>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{accountLabels.displayName}</span>
-                    <input
-                      value={displayName}
-                      onChange={(event) => setDisplayName(event.target.value)}
-                      onBlur={handleProfileBlur}
-                      className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-sm text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
-                    />
-                  </label>
-                  <div className="flex items-center justify-end gap-3 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => supabase.auth.signOut()}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:bg-zinc-800 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-                    >
-                      <LogOut className="h-3.5 w-3.5" />
-                      {accountLabels.signOut}
-                    </button>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setAccountPanel('edit')}
+                    className={`flex h-[52px] w-full items-center gap-4 rounded-lg px-4 text-left text-[20px] font-semibold leading-6 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 ${
+                      accountPanel === 'edit'
+                        ? 'bg-gray-200 text-gray-700 dark:bg-zinc-800 dark:text-zinc-100'
+                        : 'text-gray-600 hover:bg-gray-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    <Pencil className="h-7 w-7 flex-shrink-0" />
+                    <span>{accountLabels.editAccount}</span>
+                  </button>
+                  {accountPanel === 'edit' && (
+                    <label className="block px-1 pb-2">
+                      <span className="sr-only">{accountLabels.displayName}</span>
+                      <input
+                        value={displayName}
+                        onChange={(event) => setDisplayName(event.target.value)}
+                        onBlur={handleProfileBlur}
+                        className="w-full rounded-lg bg-gray-100 px-4 py-2.5 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
+                      />
+                    </label>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountPanel('wallpaper');
+                      showProfileToast('done', accountLabels.comingSoon);
+                    }}
+                    className={`flex h-[52px] w-full items-center gap-4 rounded-lg px-4 text-left text-[20px] font-semibold leading-6 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 ${
+                      accountPanel === 'wallpaper'
+                        ? 'bg-gray-200 text-gray-700 dark:bg-zinc-800 dark:text-zinc-100'
+                        : 'text-gray-600 hover:bg-gray-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    <Settings className="h-7 w-7 flex-shrink-0" />
+                    <span>{accountLabels.setWallpaper}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isLifetime) {
+                        setAccountOpen(false);
+                        openUpgradeDialog();
+                      }
+                    }}
+                    className="flex h-[52px] w-full items-center gap-4 rounded-lg px-4 text-left text-[20px] font-semibold leading-6 text-gray-600 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
+                  >
+                    <Diamond className="h-7 w-7 flex-shrink-0" />
+                    <span>{isLifetime ? accountLabels.alreadyMember : accountLabels.upgrade}</span>
+                  </button>
+                </div>
+                <div className="mt-8 flex items-center gap-9 text-[20px] leading-6 text-gray-500 dark:text-gray-400">
+                  <div className="flex items-center gap-2.5">
+                    <Grid2X2 className="h-5 w-5" />
+                    <span>{categoryUsage}</span>
                   </div>
+                  <div className="flex items-center gap-2.5">
+                    <PanelTop className="h-5 w-5" />
+                    <span>{linkUsage}</span>
+                  </div>
+                </div>
+                <div className="mt-7 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => supabase.auth.signOut()}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    {accountLabels.signOut}
+                  </button>
                 </div>
               </div>
             )}
@@ -703,6 +847,129 @@ function LoadingScreen() {
   );
 }
 
+function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { lang } = useContext(LangContext);
+  const { summary, redeemMembershipCode } = useContext(MembershipContext);
+  const t = ACCOUNT_LABELS[lang];
+  const [code, setCode] = useState('');
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+  const xianyuUrl = (import.meta.env.VITE_XIANYU_MEMBERSHIP_URL as string | undefined) || '#';
+  const isLifetime = summary.plan === 'lifetime';
+
+  useEffect(() => {
+    if (open) {
+      setCode('');
+      setStatus(isLifetime ? 'success' : 'idle');
+      setMessage(isLifetime ? t.alreadyMember : '');
+    }
+  }, [isLifetime, open, t.alreadyMember]);
+
+  if (!open) return null;
+
+  const handleRedeem = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!code.trim() || status === 'submitting') return;
+
+    setStatus('submitting');
+    setMessage('');
+    const result = await redeemMembershipCode(code);
+    setStatus(result.ok ? 'success' : 'error');
+    setMessage(result.message || (result.ok ? t.alreadyMember : t.invalidCode));
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Close membership dialog"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/45 backdrop-blur-sm"
+      />
+      <section className="relative w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950">
+              {status === 'success' ? <Sparkles className="h-5 w-5" /> : <Diamond className="h-5 w-5" />}
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-950 dark:text-gray-100">{isLifetime ? t.alreadyMember : t.upgradeTitle}</h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t.upgradeSubtitle}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-5 rounded-lg bg-gray-100 p-4 dark:bg-zinc-800">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{t.lifetime}</p>
+              <p className="mt-1 text-3xl font-semibold text-gray-950 dark:text-gray-100">{t.upgradePrice}</p>
+            </div>
+            <div className="text-right text-sm text-gray-600 dark:text-gray-300">
+              <p>{lang === 'zh' ? '分类不限' : 'Unlimited categories'}</p>
+              <p>{lang === 'zh' ? '网站不限' : 'Unlimited sites'}</p>
+            </div>
+          </div>
+        </div>
+
+        {!isLifetime && (
+          <a
+            href={xianyuUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={`mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus-visible:ring-zinc-600 ${xianyuUrl === '#' ? 'pointer-events-none opacity-60' : ''}`}
+          >
+            <ExternalLink className="h-4 w-4" />
+            {t.buyOnXianyu}
+          </a>
+        )}
+
+        <form onSubmit={handleRedeem} className="mt-5 space-y-3">
+          <label className="block">
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t.redeemCode}</span>
+            <span className="mt-2 flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2.5 ring-1 ring-transparent transition focus-within:ring-2 focus-within:ring-gray-300 dark:bg-zinc-800 dark:focus-within:ring-zinc-600">
+              <KeyRound className="h-4 w-4 flex-shrink-0 text-gray-400" />
+              <input
+                value={code}
+                onChange={(event) => setCode(formatMembershipCodeInput(event.target.value))}
+                placeholder={t.codePlaceholder}
+                disabled={status === 'submitting' || isLifetime}
+                className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase tracking-wider text-gray-900 outline-none placeholder:font-sans placeholder:tracking-normal placeholder:text-gray-400 disabled:opacity-60 dark:text-gray-100"
+              />
+            </span>
+          </label>
+          {message && (
+            <p className={`rounded-lg px-3 py-2 text-sm ${
+              status === 'success'
+                ? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300'
+                : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+            }`}>
+              {message}
+            </p>
+          )}
+          {!isLifetime && (
+            <button
+              type="submit"
+              disabled={!code.trim() || status === 'submitting'}
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
+            >
+              {status === 'submitting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {status === 'submitting' ? t.redeeming : t.redeemCode}
+            </button>
+          )}
+        </form>
+      </section>
+    </div>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -715,6 +982,13 @@ export default function App() {
   });
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [membershipSummary, setMembershipSummary] = useState<MembershipSummary>({
+    plan: 'free',
+    categoryCount: 0,
+    linkCount: 0,
+    loading: true,
+  });
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [authNotice, setAuthNotice] = useState('');
@@ -794,6 +1068,58 @@ export default function App() {
     return {};
   };
 
+  const refreshMembership = async () => {
+    if (!session) {
+      setMembershipSummary({ plan: 'free', categoryCount: 0, linkCount: 0, loading: false });
+      return;
+    }
+
+    setMembershipSummary((current) => ({ ...current, loading: true }));
+
+    const { data, error } = await supabase.rpc('get_membership_summary');
+    if (error) {
+      console.error('Error loading membership summary:', error);
+      setMembershipSummary((current) => ({ ...current, loading: false }));
+      return;
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    setMembershipSummary({
+      plan: isLifetimePlan(row?.plan) ? 'lifetime' : 'free',
+      categoryCount: Number(row?.category_count ?? 0),
+      linkCount: Number(row?.link_count ?? 0),
+      loading: false,
+    });
+  };
+
+  const redeemMembershipCode = async (code: string) => {
+    const normalizedCode = normalizeMembershipCodeInput(code);
+    if (!normalizedCode) {
+      return { ok: false, status: 'invalid', message: ACCOUNT_LABELS[lang].invalidCode };
+    }
+
+    const { data, error } = await supabase.rpc('redeem_membership_code', { input_code: normalizedCode });
+    if (error) {
+      console.error('Error redeeming membership code:', error);
+      return { ok: false, status: 'error', message: ACCOUNT_LABELS[lang].invalidCode };
+    }
+
+    const result = data as { ok?: boolean; status?: string; message?: string; plan?: string };
+    if (result?.ok) {
+      await refreshMembership();
+    }
+
+    return {
+      ok: Boolean(result?.ok),
+      status: result?.status ?? 'unknown',
+      message: result?.message ?? (result?.ok ? ACCOUNT_LABELS[lang].alreadyMember : ACCOUNT_LABELS[lang].invalidCode),
+    };
+  };
+
+  useEffect(() => {
+    void refreshMembership();
+  }, [session?.user.id]);
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
@@ -827,26 +1153,36 @@ export default function App() {
     <ThemeContext.Provider value={{ isDark, toggleDark }}>
       <LangContext.Provider value={{ lang, setLang }}>
         <AuthContext.Provider value={{ session, profile, updateProfile }}>
-          {authLoading ? (
-            <LoadingScreen />
-          ) : passwordRecovery ? (
-            <PasswordResetScreen onDone={(notice) => {
-              setPasswordRecovery(false);
-              setAuthNotice(notice);
-            }} />
-          ) : !session ? (
-            <AuthScreen notice={authNotice} />
-          ) : (
-            <BrowserRouter>
-              <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-zinc-900 flex flex-col transition-colors duration-200">
-                <NavBar />
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/categories" element={<Categories />} />
-                </Routes>
-              </div>
-            </BrowserRouter>
-          )}
+          <MembershipContext.Provider
+            value={{
+              summary: membershipSummary,
+              refreshMembership,
+              redeemMembershipCode,
+              openUpgradeDialog: () => setUpgradeOpen(true),
+            }}
+          >
+            {authLoading ? (
+              <LoadingScreen />
+            ) : passwordRecovery ? (
+              <PasswordResetScreen onDone={(notice) => {
+                setPasswordRecovery(false);
+                setAuthNotice(notice);
+              }} />
+            ) : !session ? (
+              <AuthScreen notice={authNotice} />
+            ) : (
+              <BrowserRouter>
+                <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-zinc-900 flex flex-col transition-colors duration-200">
+                  <NavBar />
+                  <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/categories" element={<Categories />} />
+                  </Routes>
+                </div>
+              </BrowserRouter>
+            )}
+            <UpgradeDialog open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+          </MembershipContext.Provider>
         </AuthContext.Provider>
       </LangContext.Provider>
     </ThemeContext.Provider>

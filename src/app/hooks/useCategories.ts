@@ -119,6 +119,18 @@ const createShareCode = () => {
 
 const normalizeShareCode = (code: string) => code.trim().toUpperCase().replace(/\s+/g, '');
 
+const quotaErrorMessage = (message: string) => {
+  if (message.includes('QUOTA_CATEGORY_LIMIT')) {
+    return '免费用户最多可创建 5 个分类，请升级会员后继续创建。';
+  }
+
+  if (message.includes('QUOTA_LINK_LIMIT')) {
+    return '免费用户最多可保存 30 个网站，请升级会员后继续添加。';
+  }
+
+  return message;
+};
+
 const isLegacyDefaultSeed = (categories: NavCategoryRow[], links: NavLinkRow[]) => {
   if (categories.length !== LEGACY_SEED_CATEGORY_IDS.length || links.length !== LEGACY_SEED_LINK_IDS.length) {
     return false;
@@ -340,23 +352,24 @@ export function useCategories() {
       const category = categories.find((cat) => cat.id === categoryId);
       const nextOrder = category?.items.length ?? 999;
 
-      const { error: insertError } = await supabase.from('nav_links').insert({
-        owner_id: userId,
-        id: createId(),
-        category_id: categoryId,
-        name: item.name,
-        url: item.url,
-        description: item.description,
-        icon: item.icon,
-        favicon_url: item.faviconUrl || null,
-        order_index: nextOrder,
+      const { error: insertError } = await supabase.rpc('create_nav_link', {
+        p_link_id: createId(),
+        p_category_id: categoryId,
+        p_link_name: item.name,
+        p_link_url: item.url,
+        p_link_description: item.description,
+        p_link_icon: item.icon,
+        p_link_favicon_url: item.faviconUrl || '',
+        p_link_order: nextOrder,
       });
 
       if (insertError) throw insertError;
       await fetchCategories();
+      return true;
     } catch (err) {
       console.error('Error adding item:', err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(quotaErrorMessage(err instanceof Error ? err.message : String(err)));
+      return false;
     }
   };
 
@@ -432,19 +445,21 @@ export function useCategories() {
         updated_at: new Date().toISOString(),
       };
 
-      const { data, error: upsertError } = await supabase
-        .from('nav_categories')
-        .upsert(categoryData, { onConflict: 'owner_id,id' })
-        .select('id, title, description, order_index')
-        .single();
+      const { data, error: upsertError } = await supabase.rpc('upsert_nav_category', {
+        p_category_id: categoryData.id,
+        p_category_title: categoryData.title,
+        p_category_description: categoryData.description,
+        p_category_order: categoryData.order_index,
+      });
 
       if (upsertError) throw upsertError;
       await fetchCategories();
 
-      return toCategory(data as NavCategoryRow, []);
+      const row = Array.isArray(data) ? data[0] : data;
+      return toCategory(row as NavCategoryRow, []);
     } catch (err) {
       console.error('Error saving category:', err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(quotaErrorMessage(err instanceof Error ? err.message : String(err)));
       return null;
     }
   };
@@ -572,7 +587,6 @@ export function useCategories() {
       const targetCategory = categories.find((category) => category.id === categoryId);
       const startOrder = targetCategory?.items.length ?? 0;
       const rows = links.map((item, index) => ({
-        owner_id: userId,
         id: createId(),
         category_id: categoryId,
         name: item.name,
@@ -583,14 +597,14 @@ export function useCategories() {
         order_index: startOrder + index,
       }));
 
-      const { error: insertError } = await supabase.from('nav_links').insert(rows);
+      const { error: insertError } = await supabase.rpc('create_nav_links_batch', { p_links: rows });
       if (insertError) throw insertError;
 
       await fetchCategories();
       return true;
     } catch (err) {
       console.error('Error importing shared links:', err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(quotaErrorMessage(err instanceof Error ? err.message : String(err)));
       return false;
     }
   };
