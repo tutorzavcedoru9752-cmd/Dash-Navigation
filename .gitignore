@@ -10,3 +10,5 @@ coverage/
 .playwright-cli/
 output/
 generated-membership-codes/
+
+.vercel
