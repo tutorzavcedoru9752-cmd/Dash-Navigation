@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useRef, useEffect } from 'react';
+import { createContext, useContext, useState, useRef, useEffect, type CSSProperties } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router';
-import { CheckCircle2, ChevronDown, Diamond, ExternalLink, Grid2X2, KeyRound, Languages, Loader2, Lock, LogOut, Mail, PanelTop, Pencil, Settings, Sparkles, Sun, Moon, UserRound, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ExternalLink, Gem, Grid2X2, KeyRound, Languages, Loader2, Lock, LogOut, Mail, PanelTop, Pencil, Settings, Sparkles, Sun, Moon, Upload, UserRound, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import Home from './components/Home';
 import Categories from './components/Categories';
@@ -28,7 +28,13 @@ export const AuthContext = createContext<{
   session: Session | null;
   profile: UserProfile | null;
   updateProfile: (patch: ProfilePatch) => Promise<{ error?: string }>;
-}>({ session: null, profile: null, updateProfile: async () => ({}) });
+  uploadProfileAvatar: (file: File) => Promise<{ url?: string; error?: string }>;
+}>({
+  session: null,
+  profile: null,
+  updateProfile: async () => ({}),
+  uploadProfileAvatar: async () => ({ error: 'Avatar upload unavailable.' }),
+});
 
 export type MembershipPlan = 'free' | 'lifetime';
 
@@ -150,6 +156,8 @@ const cacheWallpaperSettings = (settings: WallpaperSettings) => {
 const isBuiltInLifetimeWallpaper = (wallpaperId: string) =>
   WALLPAPERS.some((wallpaper) => wallpaper.id === wallpaperId && wallpaper.access === 'lifetime');
 
+const XIANYU_MEMBERSHIP_URL = 'https://m.tb.cn/h.8NvRUGx?tk=RHkETf2uFdQ';
+
 // ─── Nav labels ───────────────────────────────────────────────────────────────
 
 const NAV_LABELS: Record<Lang, { home: string; categories: string; signOut: string }> = {
@@ -161,7 +169,16 @@ const ACCOUNT_LABELS = {
   en: {
     account: 'Account',
     displayName: 'Display name',
-    avatarUrl: 'Avatar URL',
+    avatarUrl: 'Avatar image',
+    uploadAvatar: 'Upload avatar',
+    cropAvatar: 'Crop avatar',
+    cropHint: 'Use the sliders to frame the visible square.',
+    cropZoom: 'Zoom',
+    cropHorizontal: 'Horizontal',
+    cropVertical: 'Vertical',
+    applyCrop: 'Use cropped avatar',
+    uploadingAvatar: 'Uploading avatar...',
+    avatarUploadError: 'Could not upload avatar. Please try another image.',
     avatarLocked: 'Custom avatar is a lifetime membership feature.',
     saveProfile: 'Save changes',
     cancel: 'Cancel',
@@ -190,7 +207,16 @@ const ACCOUNT_LABELS = {
   zh: {
     account: '账号',
     displayName: '用户名',
-    avatarUrl: '头像地址',
+    avatarUrl: '头像图片',
+    uploadAvatar: '上传头像',
+    cropAvatar: '裁剪头像',
+    cropHint: '通过滑块调整头像在方形区域里的位置。',
+    cropZoom: '缩放',
+    cropHorizontal: '左右位置',
+    cropVertical: '上下位置',
+    applyCrop: '使用裁剪头像',
+    uploadingAvatar: '头像上传中...',
+    avatarUploadError: '头像上传失败，请换一张图片。',
     avatarLocked: '自定义头像是会员功能，请先升级会员。',
     saveProfile: '保存修改',
     cancel: '取消',
@@ -292,6 +318,124 @@ const formatMembershipCodeInput = (value: string) => {
 
 const isLifetimePlan = (plan: string | null | undefined): plan is 'lifetime' => plan === 'lifetime';
 
+type AvatarCrop = {
+  zoom: number;
+  x: number;
+  y: number;
+};
+
+type InfoPageKey = 'privacy' | 'terms' | 'docs' | 'help';
+
+const INFO_PAGES: Record<InfoPageKey, Record<Lang, { title: string; body: string[] }>> = {
+  privacy: {
+    en: {
+      title: 'Privacy Policy',
+      body: [
+        'Dash keeps your navigation categories, links, profile, avatar and wallpaper settings inside your authenticated account.',
+        'We use Supabase services to store account data and provide login, sharing and membership verification. We do not sell personal data.',
+      ],
+    },
+    zh: {
+      title: '隐私政策',
+      body: [
+        'Dash 会把你的导航分类、网址、个人资料、头像和壁纸设置保存到你的登录账号中。',
+        '我们使用 Supabase 提供登录、分享和会员核验等服务，不会出售你的个人数据。',
+      ],
+    },
+  },
+  terms: {
+    en: {
+      title: 'Terms of Service',
+      body: [
+        'Use Dash for lawful personal navigation and collection management. You are responsible for the links and content you save or share.',
+        'Lifetime membership unlocks the listed product features for this service account and may be verified with a valid membership code.',
+      ],
+    },
+    zh: {
+      title: '服务条款',
+      body: [
+        '请将 Dash 用于合法的个人导航与收藏管理。你需要对自己保存或分享的链接内容负责。',
+        '终身会员用于解锁本服务账号内列明的产品功能，并可通过有效会员码完成核验。',
+      ],
+    },
+  },
+  docs: {
+    en: {
+      title: 'Documentation',
+      body: [
+        'Create categories on the Categories page, add websites, refresh icons, and use share codes to move selected links between accounts.',
+        'Wallpaper, custom avatar and unlimited quotas are managed from the account menu after signing in.',
+      ],
+    },
+    zh: {
+      title: '文档',
+      body: [
+        '你可以在分类页创建分类、添加网站、刷新图标，并用分享码在账号之间导入选中的网址。',
+        '壁纸、自定义头像和无限额度都可以在登录后的账号菜单里管理。',
+      ],
+    },
+  },
+  help: {
+    en: {
+      title: 'Help Center',
+      body: [
+        'If a link icon looks wrong, use Refresh Icons on the Categories page. If a membership code cannot be verified, check the code format and try again.',
+        'For purchase questions, open the Lifetime membership card and use the Xianyu purchase link.',
+      ],
+    },
+    zh: {
+      title: '帮助中心',
+      body: [
+        '如果网站图标显示异常，可以在分类页使用“刷新图标”。如果会员码无法核验，请先检查格式再重试。',
+        '购买相关问题可以打开终身会员卡片，通过闲鱼购买入口继续处理。',
+      ],
+    },
+  },
+};
+
+const DEFAULT_AVATAR_CROP: AvatarCrop = { zoom: 1, x: 0, y: 0 };
+
+const createCroppedAvatarFile = async (sourceUrl: string, sourceFile: File, crop: AvatarCrop) => {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not read image.'));
+    img.src = sourceUrl;
+  });
+
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Could not prepare avatar crop.');
+
+  const baseScale = Math.max(size / image.naturalWidth, size / image.naturalHeight);
+  const scale = baseScale * crop.zoom;
+  const drawWidth = image.naturalWidth * scale;
+  const drawHeight = image.naturalHeight * scale;
+  const maxShiftX = Math.max(0, (drawWidth - size) / 2);
+  const maxShiftY = Math.max(0, (drawHeight - size) / 2);
+  const drawX = (size - drawWidth) / 2 + (crop.x / 100) * maxShiftX;
+  const drawY = (size - drawHeight) / 2 + (crop.y / 100) * maxShiftY;
+
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+
+  const outputType = ['image/jpeg', 'image/png', 'image/webp'].includes(sourceFile.type)
+    ? sourceFile.type
+    : 'image/jpeg';
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result) resolve(result);
+      else reject(new Error('Could not create cropped avatar.'));
+    }, outputType, 0.92);
+  });
+
+  const extension = outputType.split('/')[1] || 'jpg';
+  const baseName = sourceFile.name.replace(/\.[^.]+$/, '') || 'avatar';
+  return new File([blob], `${baseName}-cropped.${extension}`, { type: outputType });
+};
+
 function ModeControls() {
   const { lang, setLang } = useContext(LangContext);
   const { isDark, toggleDark } = useContext(ThemeContext);
@@ -378,9 +522,11 @@ function NavDropdown() {
 
 function NavBar() {
   const location = useLocation();
-  const { lang } = useContext(LangContext);
-  const { session, profile, updateProfile } = useContext(AuthContext);
+  const { lang, setLang } = useContext(LangContext);
+  const { isDark, toggleDark } = useContext(ThemeContext);
+  const { session, profile, updateProfile, uploadProfileAvatar } = useContext(AuthContext);
   const { summary, openUpgradeDialog } = useContext(MembershipContext);
+  const { settings: wallpaperSettings } = useContext(WallpaperContext);
   const [accountOpen, setAccountOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
@@ -401,6 +547,50 @@ function NavBar() {
   const planLabel = isLifetime ? accountLabels.lifetime : accountLabels.free;
   const categoryUsage = isLifetime ? '∞' : `${summary.categoryCount}/${FREE_CATEGORY_LIMIT}`;
   const linkUsage = isLifetime ? '∞' : `${summary.linkCount}/${FREE_LINK_LIMIT}`;
+  const activeWallpaper = getWallpaperById(wallpaperSettings.wallpaperId);
+  const activeWallpaperUrl = wallpaperSettings.wallpaperId === CUSTOM_WALLPAPER_ID
+    ? wallpaperSettings.customWallpaperUrl
+    : activeWallpaper?.src;
+  const routeHasWallpaperBackground = location.pathname === '/' || location.pathname === '/categories';
+  const hasWallpaper = routeHasWallpaperBackground && Boolean(activeWallpaperUrl && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
+  const surfaceOpacity = clampCardOpacity(wallpaperSettings.cardOpacity);
+  const useDarkNavSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightNav === 'dark'));
+  const useDarkAccountSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightSurface === 'dark'));
+  const navPrimaryClass = useDarkNavSurface ? 'text-white' : 'text-gray-900 dark:text-gray-100';
+  const navMutedClass = useDarkNavSurface ? 'text-white/70 hover:text-white' : 'text-[#363636] dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100';
+  const navActiveClass = useDarkNavSurface
+    ? 'text-white border-b-2 border-white pb-1'
+    : 'text-gray-900 dark:text-gray-100 border-b-2 border-gray-900 dark:border-zinc-100 pb-1';
+  const navSurfaceStyle = hasWallpaper
+    ? {
+        backgroundColor: useDarkNavSurface ? 'rgba(24, 24, 27, 0.15)' : 'rgba(255, 255, 255, 0.15)',
+        backdropFilter: 'blur(14px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+      }
+    : undefined;
+  const accountMenuSurfaceStyle: CSSProperties | undefined = hasWallpaper
+    ? {
+        backgroundColor: useDarkAccountSurface ? `rgba(24, 24, 27, ${surfaceOpacity})` : `rgba(255, 255, 255, ${surfaceOpacity})`,
+        backdropFilter: 'blur(18px) saturate(1.25)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
+      }
+    : undefined;
+  const accountMenuTextClass = useDarkAccountSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
+  const accountMenuMutedClass = useDarkAccountSurface ? 'text-white/70' : 'text-gray-500 dark:text-gray-400';
+  const accountMenuItemClass = useDarkAccountSurface
+    ? 'text-white/85 hover:bg-white/10 focus-visible:ring-white/20'
+    : 'text-gray-700 hover:bg-gray-100 focus-visible:ring-gray-300 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600';
+  const accountMenuIconClass = useDarkAccountSurface ? 'text-white/60' : 'text-gray-500 dark:text-zinc-400';
+  const accountMenuDividerClass = useDarkAccountSurface ? 'border-white/10' : 'border-gray-100 dark:border-zinc-800';
+  const accountSmallButtonClass = useDarkAccountSurface
+    ? 'bg-white/10 text-white/75 hover:bg-white/15 hover:text-white focus-visible:ring-white/20'
+    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-950 focus-visible:ring-gray-300 dark:bg-zinc-800 dark:text-gray-300 dark:hover:bg-zinc-700 dark:hover:text-white dark:focus-visible:ring-zinc-600';
+  const categoryQuotaTitle = isLifetime
+    ? (lang === 'zh' ? '分类额度：不限' : 'Category quota: unlimited')
+    : (lang === 'zh' ? `分类额度：${summary.categoryCount}/${FREE_CATEGORY_LIMIT}` : `Category quota: ${summary.categoryCount}/${FREE_CATEGORY_LIMIT}`);
+  const linkQuotaTitle = isLifetime
+    ? (lang === 'zh' ? '网站额度：不限' : 'Site quota: unlimited')
+    : (lang === 'zh' ? `网站额度：${summary.linkCount}/${FREE_LINK_LIMIT}` : `Site quota: ${summary.linkCount}/${FREE_LINK_LIMIT}`);
 
   useEffect(() => {
     setDisplayName(name);
@@ -455,9 +645,16 @@ function NavBar() {
 
   return (
     <>
-    <nav className="sticky top-0 z-50 bg-white/80 dark:bg-zinc-900/85 backdrop-blur-md border-b border-gray-200 dark:border-zinc-800 shadow-sm transition-colors duration-200">
+    <nav
+      style={navSurfaceStyle}
+      className={`sticky top-0 z-50 border-b shadow-sm transition-colors duration-200 ${
+        hasWallpaper
+          ? `${useDarkNavSurface ? 'border-white/10' : 'border-white/45 dark:border-white/10'}`
+          : 'border-gray-200 bg-white/80 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/85'
+      }`}
+    >
       <div className="max-w-[1200px] mx-auto px-6 lg:px-20 py-3 flex justify-between items-center">
-        <div className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-xl">Dash</div>
+        <div className={`text-lg font-bold tracking-tight sm:text-xl ${navPrimaryClass}`}>Dash</div>
         <div className="flex items-center gap-4 md:gap-8">
           <div className="flex items-baseline gap-4 md:gap-8">
             <NavDropdown />
@@ -465,8 +662,8 @@ function NavBar() {
               to="/"
               className={`hidden md:block font-medium text-sm ${
                 isActive('/')
-                  ? 'text-gray-900 dark:text-gray-100 border-b-2 border-gray-900 dark:border-zinc-100 pb-1'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors'
+                  ? navActiveClass
+                  : `${navMutedClass} transition-colors`
               }`}
             >
               {labels.home}
@@ -475,14 +672,14 @@ function NavBar() {
               to="/categories"
               className={`hidden md:block font-medium text-sm ${
                 isActive('/categories')
-                  ? 'text-gray-900 dark:text-gray-100 border-b-2 border-gray-900 dark:border-zinc-100 pb-1'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors'
+                  ? navActiveClass
+                  : `${navMutedClass} transition-colors`
               }`}
             >
               {labels.categories}
             </Link>
           </div>
-          <div ref={accountRef} className="relative pl-2 sm:pl-4 sm:border-l sm:border-gray-200 dark:sm:border-zinc-800">
+          <div ref={accountRef} className={`relative pl-2 sm:pl-4 sm:border-l ${useDarkNavSurface ? 'sm:border-white/10' : 'sm:border-gray-200 dark:sm:border-zinc-800'}`}>
             <button
               type="button"
               onClick={() => setAccountOpen((open) => !open)}
@@ -490,22 +687,47 @@ function NavBar() {
               aria-label={accountLabels.account}
               className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white shadow-sm transition hover:scale-[1.03] hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
             >
-              <UserRound className="h-4 w-4" />
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <UserRound className="h-4 w-4" />
+              )}
             </button>
             {accountOpen && (
-              <div className="absolute right-0 top-full mt-3 max-h-[calc(100vh-5rem)] w-[min(21rem,calc(100vw-1.5rem))] overflow-y-auto rounded-lg border border-gray-200 bg-white p-4 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950 dark:text-white">
+              <>
+              <button
+                type="button"
+                aria-label="Close account menu"
+                onClick={() => setAccountOpen(false)}
+                className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+              />
+              <div
+                style={accountMenuSurfaceStyle}
+                className={`absolute right-0 top-full z-50 mt-3 max-h-[calc(100vh-5rem)] w-[330px] max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-lg border p-3.5 shadow-xl ${
+                  hasWallpaper
+                    ? 'border-white/35 shadow-[0_20px_60px_rgba(15,23,42,0.18)] dark:border-white/10'
+                    : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    setEditProfileOpen(true);
+                  }}
+                  className={`mb-3 flex w-full items-center gap-3 rounded-lg p-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 ${useDarkAccountSurface ? 'hover:bg-white/10 focus-visible:ring-white/20' : 'hover:bg-gray-100 focus-visible:ring-gray-300 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600'}`}
+                >
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950 dark:text-white">
                     {profile?.avatar_url ? (
                       <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <UserRound className="h-5 w-5" />
+                      <UserRound className="h-4.5 w-4.5" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">
-                      <p className="truncate text-base font-semibold leading-5 text-gray-950 dark:text-gray-100">{name}</p>
-                      <span className={`inline-flex h-5 flex-shrink-0 items-center rounded-full px-2 text-xs font-medium ${
+                      <p className={`truncate text-base font-semibold leading-5 ${accountMenuTextClass}`}>{name}</p>
+                      <span className={`inline-flex h-5 flex-shrink-0 items-center rounded-full px-2.5 text-[10px] font-normal ${
                         isLifetime
                           ? 'bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950'
                           : 'bg-gray-200 text-gray-600 dark:bg-zinc-700 dark:text-zinc-300'
@@ -513,30 +735,19 @@ function NavBar() {
                         {planLabel}
                       </span>
                     </div>
-                    <p className="mt-1 truncate text-xs leading-4 text-gray-500 dark:text-gray-400">{email}</p>
+                    <p className={`mt-1 truncate text-xs leading-4 ${accountMenuMutedClass}`}>{email}</p>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAccountOpen(false);
-                      setEditProfileOpen(true);
-                    }}
-                    className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
-                  >
-                    <Pencil className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-zinc-400" />
-                    <span>{accountLabels.editAccount}</span>
-                  </button>
+                </button>
+                <div className="space-y-1.5">
                   <button
                     type="button"
                     onClick={() => {
                       setAccountOpen(false);
                       setWallpaperOpen(true);
                     }}
-                    className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
+                    className={`flex h-10 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 ${accountMenuItemClass}`}
                   >
-                    <Settings className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-zinc-400" />
+                    <Settings className={`h-4 w-4 flex-shrink-0 ${accountMenuIconClass}`} />
                     <span>{accountLabels.setWallpaper}</span>
                   </button>
                   <button
@@ -547,52 +758,75 @@ function NavBar() {
                         openUpgradeDialog();
                       }
                     }}
-                    className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
+                    className={`flex h-10 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 ${accountMenuItemClass}`}
                   >
-                    <Diamond className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-zinc-400" />
+                    <Gem className={`h-4 w-4 flex-shrink-0 ${accountMenuIconClass}`} />
                     <span>{isLifetime ? accountLabels.alreadyMember : accountLabels.upgrade}</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => supabase.auth.signOut()}
+                    className={`flex h-10 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 ${accountMenuItemClass}`}
+                  >
+                    <LogOut className={`h-4 w-4 flex-shrink-0 ${accountMenuIconClass}`} />
+                    <span>{accountLabels.signOut}</span>
+                  </button>
                 </div>
-                <div className="mt-4 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-zinc-800">
-                  <div className="flex min-w-0 items-center gap-4 text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <div className="flex items-center gap-1.5">
+                <div className={`mt-2 flex items-center justify-between border-t pt-2 ${accountMenuDividerClass}`}>
+                  <div className={`flex items-center gap-4 pl-3 text-xs font-medium ${accountMenuMutedClass}`}>
+                    <div className="flex items-center gap-1.5" title={categoryQuotaTitle}>
                       <Grid2X2 className="h-3.5 w-3.5" />
                       <span>{categoryUsage}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5" title={linkQuotaTitle}>
                       <PanelTop className="h-3.5 w-3.5" />
                       <span>{linkUsage}</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => supabase.auth.signOut()}
-                    className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    {accountLabels.signOut}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
+                      title={lang === 'en' ? '切换为中文' : 'Switch to English'}
+                      aria-label={lang === 'en' ? 'Switch to Chinese' : '切换为英文'}
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg transition focus-visible:outline-none focus-visible:ring-2 ${accountSmallButtonClass}`}
+                    >
+                      <Languages className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleDark}
+                      title={isDark ? (lang === 'en' ? 'Light mode' : '浅色模式') : (lang === 'en' ? 'Dark mode' : '深色模式')}
+                      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg transition focus-visible:outline-none focus-visible:ring-2 ${accountSmallButtonClass}`}
+                    >
+                      {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </div>
               </div>
+              </>
             )}
           </div>
         </div>
       </div>
-      <div className={`fixed bottom-6 right-6 z-[70] flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg transition-all duration-300 pointer-events-none ${
-        profileToast === null ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
-      } ${
-        profileToast?.status === 'error'
-          ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200'
-          : 'bg-gray-900 text-white dark:bg-blue-950'
-      }`}>
-        {profileToast?.status === 'saving' ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <CheckCircle2 className="h-4 w-4" />
-        )}
-        <span>{profileToast?.msg ?? ''}</span>
-      </div>
     </nav>
+    <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium shadow-lg transition-all duration-300 pointer-events-none ${
+      profileToast === null ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
+    } ${
+      profileToast?.status === 'error'
+        ? 'border-red-100 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300'
+        : profileToast?.status === 'done'
+          ? 'border-gray-200 bg-white text-green-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-green-400'
+          : 'border-gray-200 bg-white text-gray-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-400'
+    }`}>
+      {profileToast?.status === 'saving' ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <CheckCircle2 className="h-4 w-4" />
+      )}
+      <span>{profileToast?.msg ?? ''}</span>
+    </div>
     <EditProfileDialog
       open={editProfileOpen}
       onClose={() => setEditProfileOpen(false)}
@@ -601,6 +835,7 @@ function NavBar() {
       avatarUrl={avatarInput}
       isLifetime={isLifetime}
       onSave={handleProfileSave}
+      onUploadAvatar={uploadProfileAvatar}
       onUpgrade={() => {
         setEditProfileOpen(false);
         openUpgradeDialog();
@@ -622,6 +857,7 @@ function EditProfileDialog({
   avatarUrl,
   isLifetime,
   onSave,
+  onUploadAvatar,
   onUpgrade,
 }: {
   open: boolean;
@@ -631,21 +867,55 @@ function EditProfileDialog({
   avatarUrl: string;
   isLifetime: boolean;
   onSave: (name: string, avatarUrl: string) => Promise<boolean>;
+  onUploadAvatar: (file: File) => Promise<{ url?: string; error?: string }>;
   onUpgrade: () => void;
 }) {
   const { lang } = useContext(LangContext);
+  const { isDark } = useContext(ThemeContext);
+  const { settings: wallpaperSettings } = useContext(WallpaperContext);
   const t = ACCOUNT_LABELS[lang];
   const [draftName, setDraftName] = useState(name);
   const [draftAvatar, setDraftAvatar] = useState(avatarUrl);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
+  const [avatarCropSrc, setAvatarCropSrc] = useState<string | null>(null);
+  const [avatarCrop, setAvatarCrop] = useState<AvatarCrop>(DEFAULT_AVATAR_CROP);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const activeWallpaper = getWallpaperById(wallpaperSettings.wallpaperId);
+  const activeWallpaperUrl = wallpaperSettings.wallpaperId === CUSTOM_WALLPAPER_ID
+    ? wallpaperSettings.customWallpaperUrl
+    : activeWallpaper?.src;
+  const hasWallpaper = Boolean(activeWallpaperUrl && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
+  const useDarkSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightSurface === 'dark'));
+  const dialogSurfaceStyle: CSSProperties | undefined = hasWallpaper
+    ? {
+        backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${clampCardOpacity(wallpaperSettings.cardOpacity)})` : `rgba(255, 255, 255, ${clampCardOpacity(wallpaperSettings.cardOpacity)})`,
+        backdropFilter: 'blur(18px) saturate(1.25)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
+      }
+    : undefined;
 
   useEffect(() => {
     if (open) {
       setDraftName(name);
       setDraftAvatar(avatarUrl);
       setSaving(false);
+      setUploadingAvatar(false);
+      setAvatarError('');
+      setSelectedAvatarFile(null);
+      setAvatarCrop(DEFAULT_AVATAR_CROP);
+      setAvatarCropSrc((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
     }
   }, [avatarUrl, name, open]);
+
+  useEffect(() => () => {
+    if (avatarCropSrc) URL.revokeObjectURL(avatarCropSrc);
+  }, [avatarCropSrc]);
 
   if (!open) return null;
 
@@ -659,6 +929,50 @@ function EditProfileDialog({
     if (ok) onClose();
   };
 
+  const handleAvatarFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!isLifetime) {
+      onUpgrade();
+      return;
+    }
+
+    setAvatarError('');
+    setSelectedAvatarFile(file);
+    setAvatarCrop(DEFAULT_AVATAR_CROP);
+    setAvatarCropSrc((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return URL.createObjectURL(file);
+    });
+  };
+
+  const handleCroppedAvatarUpload = async () => {
+    if (!selectedAvatarFile || !avatarCropSrc || uploadingAvatar) return;
+
+    setUploadingAvatar(true);
+    setAvatarError('');
+    let result: { url?: string; error?: string };
+    try {
+      const croppedFile = await createCroppedAvatarFile(avatarCropSrc, selectedAvatarFile, avatarCrop);
+      result = await onUploadAvatar(croppedFile);
+    } catch {
+      result = { error: t.avatarUploadError };
+    }
+    setUploadingAvatar(false);
+    if (result.error || !result.url) {
+      setAvatarError(result.error || t.avatarUploadError);
+      return;
+    }
+    setDraftAvatar(result.url);
+    setSelectedAvatarFile(null);
+    setAvatarCrop(DEFAULT_AVATAR_CROP);
+    setAvatarCropSrc((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  };
+
   return (
     <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-4 py-6 sm:items-center">
       <button
@@ -667,19 +981,19 @@ function EditProfileDialog({
         onClick={onClose}
         className="absolute inset-0 bg-black/45 backdrop-blur-sm"
       />
-      <section className="relative max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 sm:p-6">
-        <div className="mb-6 flex items-center justify-between gap-4">
+      <section
+        style={dialogSurfaceStyle}
+        className={`relative max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border p-5 shadow-2xl sm:p-6 ${
+          hasWallpaper
+            ? 'border-white/35 dark:border-white/10'
+            : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
+        }`}
+      >
+        <div className="mb-6 flex items-center gap-3">
           <div className="flex items-center gap-3">
             <Pencil className="h-5 w-5 text-gray-900 dark:text-gray-100" />
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.editAccount}</h2>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -706,16 +1020,112 @@ function EditProfileDialog({
             />
           </label>
 
-          <label className="block">
+          <div className="block">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.avatarUrl}</span>
             <input
-              value={isLifetime ? draftAvatar : ''}
-              onChange={(event) => setDraftAvatar(event.target.value)}
-              disabled={!isLifetime}
-              placeholder="https://..."
-              className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-base text-gray-900 outline-none ring-1 ring-transparent transition placeholder:text-gray-400 focus:ring-2 focus:ring-gray-300 disabled:cursor-not-allowed disabled:text-gray-400 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarFileChange}
             />
-          </label>
+            <button
+              type="button"
+              onClick={() => isLifetime ? avatarInputRef.current?.click() : onUpgrade()}
+              className="mt-1.5 flex w-full items-center gap-3 rounded-lg bg-gray-100 p-3 text-left transition hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:focus-visible:ring-zinc-600"
+            >
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-gray-600 shadow-sm dark:bg-zinc-900 dark:text-zinc-300">
+                {draftAvatar && isLifetime ? (
+                  <img src={draftAvatar} alt="" className="h-full w-full object-cover" />
+                ) : uploadingAvatar ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isLifetime ? (
+                  <Upload className="h-4 w-4" />
+                ) : (
+                  <Lock className="h-4 w-4" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  {uploadingAvatar ? t.uploadingAvatar : t.uploadAvatar}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
+                  {isLifetime ? 'JPG / PNG / WebP' : t.avatarLocked}
+                </p>
+              </div>
+            </button>
+            {avatarCropSrc && (
+              <div className="mt-3 rounded-lg bg-gray-100 p-3 dark:bg-zinc-800">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t.cropAvatar}</p>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t.cropHint}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAvatarFile(null);
+                      setAvatarCrop(DEFAULT_AVATAR_CROP);
+                      setAvatarCropSrc((current) => {
+                        if (current) URL.revokeObjectURL(current);
+                        return null;
+                      });
+                    }}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-200 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 dark:focus-visible:ring-zinc-600"
+                    aria-label={t.cancel}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mx-auto aspect-square w-36 overflow-hidden rounded-full bg-gray-200 shadow-inner dark:bg-zinc-700">
+                  <img
+                    src={avatarCropSrc}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    style={{
+                      transform: `scale(${avatarCrop.zoom}) translate(${avatarCrop.x / 6}%, ${avatarCrop.y / 6}%)`,
+                      transformOrigin: 'center',
+                    }}
+                  />
+                </div>
+                <div className="mt-4 space-y-3">
+                  {[
+                    { key: 'zoom', label: t.cropZoom, min: 1, max: 3, step: 0.05, value: avatarCrop.zoom },
+                    { key: 'x', label: t.cropHorizontal, min: -100, max: 100, step: 1, value: avatarCrop.x },
+                    { key: 'y', label: t.cropVertical, min: -100, max: 100, step: 1, value: avatarCrop.y },
+                  ].map((control) => (
+                    <label key={control.key} className="grid grid-cols-[80px_1fr] items-center gap-3 text-xs font-medium text-gray-500 dark:text-gray-400">
+                      <span>{control.label}</span>
+                      <input
+                        type="range"
+                        min={control.min}
+                        max={control.max}
+                        step={control.step}
+                        value={control.value}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          setAvatarCrop((current) => ({ ...current, [control.key as keyof AvatarCrop]: value }));
+                        }}
+                        className="h-[7px] w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-gray-900 outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-700 dark:accent-zinc-100 dark:focus-visible:ring-zinc-600"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCroppedAvatarUpload}
+                  disabled={uploadingAvatar}
+                  className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
+                >
+                  {uploadingAvatar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploadingAvatar ? t.uploadingAvatar : t.applyCrop}
+                </button>
+              </div>
+            )}
+            {avatarError && (
+              <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-300">{avatarError}</p>
+            )}
+          </div>
 
           {!isLifetime && (
             <button
@@ -739,8 +1149,8 @@ function EditProfileDialog({
             </button>
             <button
               type="submit"
-              disabled={saving}
-              className="flex h-10 items-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
+              disabled={saving || uploadingAvatar || Boolean(avatarCropSrc)}
+              className="flex items-center gap-2 rounded-lg bg-gray-900 px-6 py-2 text-sm font-medium text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               {saving ? t.saving : t.saveProfile}
@@ -1098,13 +1508,34 @@ function LoadingScreen() {
 
 function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { lang } = useContext(LangContext);
+  const { isDark } = useContext(ThemeContext);
   const { summary, redeemMembershipCode } = useContext(MembershipContext);
+  const { settings: wallpaperSettings } = useContext(WallpaperContext);
   const t = ACCOUNT_LABELS[lang];
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
-  const xianyuUrl = (import.meta.env.VITE_XIANYU_MEMBERSHIP_URL as string | undefined) || '#';
+  const xianyuUrl = XIANYU_MEMBERSHIP_URL;
   const isLifetime = summary.plan === 'lifetime';
+  const activeWallpaper = getWallpaperById(wallpaperSettings.wallpaperId);
+  const activeWallpaperUrl = wallpaperSettings.wallpaperId === CUSTOM_WALLPAPER_ID
+    ? wallpaperSettings.customWallpaperUrl
+    : activeWallpaper?.src;
+  const hasWallpaper = Boolean(activeWallpaperUrl && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
+  const useDarkSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightSurface === 'dark'));
+  const dialogSurfaceStyle: CSSProperties | undefined = hasWallpaper
+    ? {
+        backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${clampCardOpacity(wallpaperSettings.cardOpacity)})` : `rgba(255, 255, 255, ${clampCardOpacity(wallpaperSettings.cardOpacity)})`,
+        backdropFilter: 'blur(18px) saturate(1.25)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
+      }
+    : undefined;
+  const primaryTextClass = useDarkSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
+  const secondaryTextClass = useDarkSurface ? 'text-white/72' : 'text-gray-600 dark:text-gray-400';
+  const fieldSurfaceClass = useDarkSurface ? 'bg-white/10 text-white placeholder:text-white/50' : 'bg-gray-100 text-gray-900 placeholder:text-gray-400 dark:bg-zinc-800 dark:text-gray-100';
+  const benefits = lang === 'zh'
+    ? ['无限创建网站分类和收藏', '会员专享壁纸与自定义壁纸功能', '会员专享自定义头像', '终身免费会员']
+    : ['Unlimited creation of website categories and collections', 'Member exclusive wallpaper and custom wallpaper function', 'Member exclusive custom avatar', 'Lifetime ad free membership'];
 
   useEffect(() => {
     if (open) {
@@ -1135,61 +1566,61 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
         onClick={onClose}
         className="absolute inset-0 bg-black/45 backdrop-blur-sm"
       />
-      <section className="relative w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            {status === 'success' ? (
-              <Sparkles className="h-5 w-5 text-gray-900 dark:text-gray-100" />
-            ) : (
-              <Diamond className="h-5 w-5 text-gray-900 dark:text-gray-100" />
+      <section
+        style={dialogSurfaceStyle}
+        className={`relative w-full max-w-md rounded-xl border p-6 shadow-2xl ${
+          hasWallpaper
+            ? 'border-white/35 dark:border-white/10'
+            : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
+        }`}
+      >
+        <div className="mb-5 flex items-center gap-3">
+          {status === 'success' ? (
+            <Sparkles className={`h-5 w-5 ${primaryTextClass}`} />
+          ) : (
+            <Gem className={`h-5 w-5 ${primaryTextClass}`} />
+          )}
+          <h2 className={`text-lg font-semibold ${primaryTextClass}`}>{isLifetime ? t.alreadyMember : t.upgradeTitle}</h2>
+        </div>
+
+        <div className={`rounded-lg p-4 ${useDarkSurface ? 'bg-white/10' : 'bg-gray-100 dark:bg-zinc-800'}`}>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex items-center gap-2">
+              <p className={`text-3xl font-bold leading-none ${primaryTextClass}`}>{t.upgradePrice}</p>
+              <span className="inline-flex h-5 items-center rounded-full bg-gray-900 px-2 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-zinc-100 dark:text-zinc-950">
+                {t.lifetime}
+              </span>
+            </div>
+            {!isLifetime && (
+              <a
+                href={xianyuUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={`inline-flex items-center gap-1.5 text-sm font-medium transition hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 ${secondaryTextClass}`}
+              >
+                {t.buyOnXianyu}
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
             )}
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{isLifetime ? t.alreadyMember : t.upgradeTitle}</h2>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <ul className={`mt-3 list-disc space-y-0.5 pl-4 text-xs leading-4 ${secondaryTextClass}`}>
+            {benefits.map((benefit) => (
+              <li key={benefit}>{benefit}</li>
+            ))}
+          </ul>
         </div>
 
-        <div className="rounded-lg bg-gray-100 p-4 dark:bg-zinc-800">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">{t.lifetime}</p>
-              <p className="mt-1 text-3xl font-semibold text-gray-950 dark:text-gray-100">{t.upgradePrice}</p>
-            </div>
-            <div className="text-right text-sm text-gray-600 dark:text-gray-300">
-              <p>{lang === 'zh' ? '分类不限' : 'Unlimited categories'}</p>
-              <p>{lang === 'zh' ? '网站不限' : 'Unlimited sites'}</p>
-            </div>
-          </div>
-        </div>
-
-        {!isLifetime && (
-          <a
-            href={xianyuUrl}
-            target="_blank"
-            rel="noreferrer"
-            className={`mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus-visible:ring-zinc-600 ${xianyuUrl === '#' ? 'pointer-events-none opacity-60' : ''}`}
-          >
-            <ExternalLink className="h-4 w-4" />
-            {t.buyOnXianyu}
-          </a>
-        )}
-
-        <form onSubmit={handleRedeem} className="mt-5 space-y-3">
+        <form onSubmit={handleRedeem} className="mt-4 space-y-3">
           <label className="block">
-            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t.redeemCode}</span>
-            <span className="mt-2 flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2.5 ring-1 ring-transparent transition focus-within:ring-2 focus-within:ring-gray-300 dark:bg-zinc-800 dark:focus-within:ring-zinc-600">
-              <KeyRound className="h-4 w-4 flex-shrink-0 text-gray-400" />
+            <span className={`text-sm font-semibold ${useDarkSurface ? 'text-white/85' : 'text-gray-700 dark:text-gray-200'}`}>{t.redeemCode}</span>
+            <span className={`mt-2 flex h-11 items-center gap-2 rounded-lg px-3 ring-1 ring-transparent transition focus-within:ring-2 focus-within:ring-gray-300 dark:focus-within:ring-zinc-600 ${fieldSurfaceClass}`}>
+              <KeyRound className="h-4 w-4 flex-shrink-0 opacity-45" />
               <input
                 value={code}
                 onChange={(event) => setCode(formatMembershipCodeInput(event.target.value))}
                 placeholder={t.codePlaceholder}
                 disabled={status === 'submitting' || isLifetime}
-                className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase tracking-wider text-gray-900 outline-none placeholder:font-sans placeholder:tracking-normal placeholder:text-gray-400 disabled:opacity-60 dark:text-gray-100"
+                className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase tracking-wider outline-none placeholder:font-sans placeholder:tracking-normal disabled:opacity-60"
               />
             </span>
           </label>
@@ -1203,18 +1634,50 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
             </p>
           )}
           {!isLifetime && (
-            <button
-              type="submit"
-              disabled={!code.trim() || status === 'submitting'}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
-            >
-              {status === 'submitting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              {status === 'submitting' ? t.redeeming : t.redeemCode}
-            </button>
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={onClose}
+                className={`flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 ${
+                  useDarkSurface
+                    ? 'text-white/75 hover:bg-white/10 focus-visible:ring-white/20'
+                    : 'text-gray-700 hover:bg-gray-100 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600'
+                }`}
+              >
+                <X className="h-4 w-4" />
+                {t.cancel}
+              </button>
+              <button
+                type="submit"
+                disabled={!code.trim() || status === 'submitting'}
+                className="flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus-visible:ring-zinc-600"
+              >
+                {status === 'submitting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {status === 'submitting' ? t.redeeming : t.redeemCode}
+              </button>
+            </div>
           )}
         </form>
       </section>
     </div>
+  );
+}
+
+function InfoPage({ page }: { page: InfoPageKey }) {
+  const { lang } = useContext(LangContext);
+  const content = INFO_PAGES[page][lang];
+
+  return (
+    <main className="flex-grow px-6 py-10 lg:px-20">
+      <section className="mx-auto w-full max-w-3xl rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 sm:p-8">
+        <h1 className="text-2xl font-semibold text-gray-950 dark:text-gray-100">{content.title}</h1>
+        <div className="mt-5 space-y-4 text-sm leading-6 text-gray-600 dark:text-gray-300">
+          {content.body.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
+        </div>
+      </section>
+    </main>
   );
 }
 
@@ -1319,6 +1782,38 @@ export default function App() {
 
     setProfile(data as UserProfile);
     return {};
+  };
+
+  const uploadProfileAvatar = async (file: File) => {
+    if (!session) return { error: 'Not signed in' };
+    if (membershipSummary.plan !== 'lifetime') {
+      setUpgradeOpen(true);
+      return { error: 'Membership required' };
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      return { error: 'Unsupported image type' };
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return { error: 'Image must be smaller than 5MB' };
+    }
+
+    const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+    const path = `${session.user.id}/avatars/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+    const { error } = await supabase.storage
+      .from('wallpapers')
+      .upload(path, file, {
+        cacheControl: '31536000',
+        contentType: file.type,
+        upsert: false,
+      });
+
+    if (error) {
+      console.error('Error uploading avatar:', error);
+      return { error: error.message };
+    }
+
+    const url = getCustomWallpaperUrl(path);
+    return url ? { url } : { error: 'Could not create avatar URL' };
   };
 
   const refreshMembership = async () => {
@@ -1504,7 +1999,7 @@ export default function App() {
   return (
     <ThemeContext.Provider value={{ isDark, toggleDark }}>
       <LangContext.Provider value={{ lang, setLang }}>
-        <AuthContext.Provider value={{ session, profile, updateProfile }}>
+        <AuthContext.Provider value={{ session, profile, updateProfile, uploadProfileAvatar }}>
           <MembershipContext.Provider
             value={{
               summary: membershipSummary,
@@ -1537,6 +2032,10 @@ export default function App() {
                     <Routes>
                       <Route path="/" element={<Home />} />
                       <Route path="/categories" element={<Categories />} />
+                      <Route path="/privacy" element={<InfoPage page="privacy" />} />
+                      <Route path="/terms" element={<InfoPage page="terms" />} />
+                      <Route path="/docs" element={<InfoPage page="docs" />} />
+                      <Route path="/help" element={<InfoPage page="help" />} />
                     </Routes>
                   </div>
                 </BrowserRouter>

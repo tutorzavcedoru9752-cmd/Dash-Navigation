@@ -1,5 +1,5 @@
-import { useContext, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Diamond, Image, Loader2, Lock, Upload, X } from 'lucide-react';
+import { useContext, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Check, CheckCircle2, Diamond, Image, Loader2, Lock, Upload, X } from 'lucide-react';
 import { LangContext, MembershipContext, ThemeContext, WallpaperContext } from '../App';
 import {
   CUSTOM_WALLPAPER_ID,
@@ -82,11 +82,21 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
 
   if (!open) return null;
 
-  const selectedWallpaper = getWallpaperById(draftWallpaperId);
   const canApplyCustom = draftWallpaperId !== CUSTOM_WALLPAPER_ID || Boolean(draftCustomPath);
   const opacityPercent = Math.round(clampCardOpacity(draftOpacity) * 100);
-  const opacityTrackPercent = ((opacityPercent - 45) / 45) * 100;
+  const opacityTrackPercent = ((opacityPercent - 25) / 65) * 100;
   const opacityTrackBackground = `linear-gradient(to right, ${isDark ? '#172554' : '#111827'} 0%, ${isDark ? '#172554' : '#111827'} ${opacityTrackPercent}%, ${isDark ? '#3f3f46' : '#e5e7eb'} ${opacityTrackPercent}%, ${isDark ? '#3f3f46' : '#e5e7eb'} 100%)`;
+  const activeWallpaper = getWallpaperById(settings.wallpaperId);
+  const activeWallpaperUrl = settings.wallpaperId === CUSTOM_WALLPAPER_ID ? settings.customWallpaperUrl : activeWallpaper?.src;
+  const hasWallpaper = Boolean(activeWallpaperUrl && settings.wallpaperId !== DEFAULT_WALLPAPER_ID);
+  const useDarkSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightSurface === 'dark'));
+  const dialogSurfaceStyle: CSSProperties | undefined = hasWallpaper
+    ? {
+        backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${clampCardOpacity(settings.cardOpacity)})` : `rgba(255, 255, 255, ${clampCardOpacity(settings.cardOpacity)})`,
+        backdropFilter: 'blur(18px) saturate(1.25)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
+      }
+    : undefined;
 
   const handleLockedChoice = () => {
     onClose();
@@ -138,7 +148,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
       return;
     }
     setStatus({ tone: 'success', message: t.saved });
-    window.setTimeout(onClose, 450);
+    window.setTimeout(onClose, 900);
   };
 
   return (
@@ -149,30 +159,22 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
         onClick={onClose}
         className="absolute inset-0 bg-black/45 backdrop-blur-sm"
       />
-      <section className="relative max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 sm:p-6">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Image className="h-5 w-5 text-gray-900 dark:text-gray-100" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.title}</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
-          >
-            <X className="h-4 w-4" />
-          </button>
+      <section
+        style={dialogSurfaceStyle}
+        className={`relative max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border p-4 shadow-2xl sm:p-6 ${
+          hasWallpaper
+            ? 'border-white/35 dark:border-white/10'
+            : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
+        }`}
+      >
+        <div className="mb-4 flex items-center gap-3 sm:mb-6">
+          <Image className="h-5 w-5 text-gray-900 dark:text-gray-100" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.title}</h2>
         </div>
 
         <div className="space-y-6">
           <div>
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.wallpapers}</p>
-              {selectedWallpaper && (
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{selectedWallpaper.name[lang]}</span>
-              )}
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3">
               {WALLPAPERS.map((wallpaper) => {
                 const locked = wallpaper.access === 'lifetime' && !isLifetime;
                 const selected = draftWallpaperId === wallpaper.id;
@@ -182,14 +184,15 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
                   <button
                     key={wallpaper.id}
                     type="button"
+                    aria-pressed={selected}
                     onMouseEnter={() => setHoveredWallpaperId(wallpaper.id)}
                     onMouseLeave={() => setHoveredWallpaperId(null)}
                     onFocus={() => setHoveredWallpaperId(wallpaper.id)}
                     onBlur={() => setHoveredWallpaperId(null)}
-                    onClick={() => locked ? handleLockedChoice() : setDraftWallpaperId(wallpaper.id)}
+                    onClick={() => locked ? handleLockedChoice() : setDraftWallpaperId(selected ? DEFAULT_WALLPAPER_ID : wallpaper.id)}
                     className={`group overflow-hidden rounded-lg border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 ${
                       selected
-                        ? 'border-gray-900 shadow-md dark:border-zinc-100'
+                        ? 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
                         : 'border-gray-200 hover:border-gray-300 dark:border-zinc-700 dark:hover:border-zinc-500'
                     }`}
                   >
@@ -201,21 +204,20 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
                         decoding="async"
                         className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
                       />
-                      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-gradient-to-t from-black/65 to-transparent p-3">
+                      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/65 to-transparent p-2 sm:gap-3 sm:p-3">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-white">{wallpaper.name[lang]}</p>
-                          <p className="truncate text-xs text-white/75">{wallpaper.description[lang]}</p>
+                          <p className="truncate text-xs font-semibold text-white sm:text-sm">{wallpaper.name[lang]}</p>
                         </div>
-                        <span className="inline-flex h-6 flex-shrink-0 items-center gap-1 rounded-full bg-white/90 px-2 text-[11px] font-semibold text-gray-900">
+                        <span className="inline-flex h-5 flex-shrink-0 items-center gap-1 rounded-full bg-white/90 px-2 text-[10px] font-normal text-gray-900 sm:h-[22px] sm:px-2.5">
                           {locked ? <Lock className="h-3 w-3" /> : wallpaper.access === 'lifetime' ? <Diamond className="h-3 w-3" /> : null}
                           {wallpaper.access === 'lifetime' ? t.lifetime : t.free}
                         </span>
                       </div>
-                      {selected && (
-                        <div className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-gray-900 text-white shadow-md dark:bg-zinc-100 dark:text-zinc-950">
-                          <CheckCircle2 className="h-4 w-4" />
-                        </div>
-                      )}
+                      <span className={`absolute right-2 top-2 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border sm:right-3 sm:top-3 ${
+                        selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-white/75 bg-white/20 text-transparent'
+                      }`}>
+                        {selected && <Check className="h-3 w-3" />}
+                      </span>
                     </div>
                   </button>
                 );
@@ -224,20 +226,20 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
               <button
                 type="button"
                 onClick={() => isLifetime ? fileInputRef.current?.click() : handleLockedChoice()}
-                className={`group flex aspect-video flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 ${
+                className={`group flex aspect-video flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-2 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 sm:gap-2 sm:px-4 ${
                   draftWallpaperId === CUSTOM_WALLPAPER_ID
                     ? 'border-gray-900 bg-gray-50 dark:border-zinc-100 dark:bg-zinc-800'
                     : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:bg-zinc-800/60 dark:hover:border-zinc-500 dark:hover:bg-zinc-800'
                 }`}
                 style={draftCustomUrl ? { backgroundImage: `linear-gradient(rgba(0,0,0,.32), rgba(0,0,0,.32)), url(${draftCustomUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
               >
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm transition group-hover:bg-gray-100 dark:bg-zinc-900 dark:text-zinc-200 dark:group-hover:bg-zinc-700">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm transition group-hover:bg-gray-100 dark:bg-zinc-900 dark:text-zinc-200 dark:group-hover:bg-zinc-700 sm:h-11 sm:w-11">
                   {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : isLifetime ? <Upload className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
                 </span>
-                <span className={`text-sm font-semibold ${draftCustomUrl ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
+                <span className={`text-xs font-semibold sm:text-sm ${draftCustomUrl ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
                   {t.custom}
                 </span>
-                <span className={`text-xs ${draftCustomUrl ? 'text-white/75' : 'text-gray-500 dark:text-gray-400'}`}>
+                <span className={`text-[11px] sm:text-xs ${draftCustomUrl ? 'text-white/75' : 'text-gray-500 dark:text-gray-400'}`}>
                   {isLifetime ? t.upload : t.locked}
                 </span>
               </button>
@@ -258,30 +260,18 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
             </div>
             <input
               type="range"
-              min={45}
+              min={25}
               max={90}
               step={1}
               value={opacityPercent}
               onChange={(event) => setDraftOpacity(clampCardOpacity(Number(event.target.value) / 100))}
               aria-label={t.opacity}
-              className="h-2 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-gray-900 outline-none transition focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-700 dark:accent-blue-950 dark:focus-visible:ring-blue-700"
+              className="h-[7px] w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-gray-900 outline-none transition focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-700 dark:accent-blue-950 dark:focus-visible:ring-blue-700"
               style={{
                 background: opacityTrackBackground,
               }}
             />
           </div>
-
-          {status && (
-            <p className={`rounded-lg px-3 py-2 text-sm ${
-              status.tone === 'success'
-                ? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300'
-                : status.tone === 'error'
-                  ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
-                  : 'bg-gray-100 text-gray-600 dark:bg-zinc-800 dark:text-zinc-300'
-            }`}>
-              {status.message}
-            </p>
-          )}
 
           <div className="flex justify-end gap-3">
             <button
@@ -296,7 +286,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
               type="button"
               onClick={handleApply}
               disabled={saving || uploading || !canApplyCustom}
-              className="flex h-10 items-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
+              className="flex items-center gap-2 rounded-lg bg-gray-900 px-6 py-2 text-sm font-medium text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               {saving ? t.applying : t.apply}
@@ -304,6 +294,18 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
           </div>
         </div>
       </section>
+      <div className={`fixed bottom-6 right-6 z-[90] flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium shadow-lg transition-all duration-300 pointer-events-none ${
+        status === null ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
+      } ${
+        status?.tone === 'error'
+          ? 'border-red-100 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300'
+          : status?.tone === 'success'
+            ? 'border-gray-200 bg-white text-green-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-green-400'
+            : 'border-gray-200 bg-white text-gray-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-400'
+      }`}>
+        {uploading || saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+        <span>{status?.message ?? ''}</span>
+      </div>
     </div>
   );
 }

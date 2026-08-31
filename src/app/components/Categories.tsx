@@ -1,8 +1,10 @@
-import { useState, useEffect, useContext, useRef } from 'react';
-import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, RefreshCw, Languages, Sun, Moon, Mail, Share2, Download, Check, KeyRound, Clock3, UserRound } from 'lucide-react';
+import { useState, useEffect, useContext, useRef, type CSSProperties } from 'react';
+import { Link as RouterLink } from 'react-router';
+import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, RefreshCw, Mail, Share2, Download, Check, KeyRound, Clock3, UserRound } from 'lucide-react';
 import { fetchFaviconData, useCategories, type LinkItem, type NavShare } from '../hooks/useCategories';
 import { motion } from 'motion/react';
-import { FREE_CATEGORY_LIMIT, FREE_LINK_LIMIT, LangContext, MembershipContext, ThemeContext } from '../App';
+import { AuthContext, FREE_CATEGORY_LIMIT, FREE_LINK_LIMIT, LangContext, MembershipContext, ThemeContext, WallpaperContext } from '../App';
+import { CUSTOM_WALLPAPER_ID, DEFAULT_WALLPAPER_ID, clampCardOpacity, getWallpaperById } from '../wallpapers';
 
 const ui = {
   en: {
@@ -214,7 +216,7 @@ const itemIconMap: Record<string, React.ReactNode> = {
 };
 
 const primaryButtonClass = 'rounded-lg bg-gray-900 text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700';
-const selectControlClass = 'w-full appearance-none rounded-lg border-none bg-gray-100 py-3 pl-3 pr-11 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600';
+const selectControlClass = 'w-full appearance-none rounded-lg border-none bg-gray-100 py-3 pl-3 pr-3 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600';
 
 function SiteFavicon({ item }: { item: Pick<LinkItem, 'name' | 'icon' | 'faviconUrl'> }) {
   const [failed, setFailed] = useState(false);
@@ -242,12 +244,12 @@ function SiteFavicon({ item }: { item: Pick<LinkItem, 'name' | 'icon' | 'favicon
 
 function ShareAuthor({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
   return (
-    <div className="flex min-w-0 flex-shrink-0 items-center gap-2 text-left">
-      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950">
+    <div className="flex min-w-0 flex-shrink-0 items-center gap-2.5 text-left">
+      <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950">
         {avatarUrl ? (
           <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <UserRound className="h-3.5 w-3.5" />
+          <UserRound className="h-3 w-3" />
         )}
       </div>
       <p className="max-w-24 truncate text-xs font-medium text-gray-900 dark:text-gray-100">{name}</p>
@@ -294,7 +296,7 @@ function CategorySelect({
         <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-500 transition-transform dark:text-gray-300 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className={`absolute left-0 right-0 z-[90] max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800 ${
+        <div className={`absolute left-0 right-0 z-[90] max-h-[92px] overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800 ${
           openUp ? 'bottom-full mb-2' : 'top-full mt-2'
         }`}>
           {categories.map((category) => {
@@ -324,8 +326,10 @@ function CategorySelect({
 }
 
 export default function Categories() {
-  const { lang, setLang } = useContext(LangContext);
-  const { isDark, toggleDark } = useContext(ThemeContext);
+  const { lang } = useContext(LangContext);
+  const { isDark } = useContext(ThemeContext);
+  const { profile } = useContext(AuthContext);
+  const { settings: wallpaperSettings } = useContext(WallpaperContext);
   const t = ui[lang];
   const {
     categories,
@@ -369,6 +373,43 @@ export default function Categories() {
   const selectedCategory = categories.find(c => c.id === selectedCategoryId);
   const hasReachedCategoryLimit = summary.plan === 'free' && summary.categoryCount >= FREE_CATEGORY_LIMIT;
   const hasReachedLinkLimit = summary.plan === 'free' && summary.linkCount >= FREE_LINK_LIMIT;
+  const builtInWallpaper = getWallpaperById(wallpaperSettings.wallpaperId);
+  const wallpaperUrl = wallpaperSettings.wallpaperId === CUSTOM_WALLPAPER_ID
+    ? wallpaperSettings.customWallpaperUrl
+    : builtInWallpaper?.src;
+  const hasWallpaper = Boolean(wallpaperUrl && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
+  const useDarkGlassSurface = hasWallpaper && (isDark || (!isDark && builtInWallpaper?.appearance?.lightSurface === 'dark'));
+  const darkOverlayMode = builtInWallpaper?.appearance?.darkOverlay ?? 'default';
+  const showDarkWallpaperOverlay = isDark && darkOverlayMode !== 'none';
+  const cardOpacity = clampCardOpacity(wallpaperSettings.cardOpacity);
+  const glassSurfaceStyle: CSSProperties | undefined = hasWallpaper
+    ? {
+        backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${cardOpacity})` : `rgba(255, 255, 255, ${cardOpacity})`,
+        backdropFilter: 'blur(14px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+      }
+    : undefined;
+  const categoryTextClass = hasWallpaper && (useDarkGlassSurface || builtInWallpaper?.appearance?.lightCategoryForeground === 'light')
+    ? 'text-white drop-shadow-sm'
+    : 'text-gray-900 dark:text-gray-100';
+  const mutedTextClass = hasWallpaper && useDarkGlassSurface
+    ? 'text-white/70'
+    : 'text-gray-600 dark:text-gray-400';
+  const faintTextClass = hasWallpaper && useDarkGlassSurface
+    ? 'text-white/55'
+    : 'text-gray-500 dark:text-gray-400';
+  const cardPrimaryTextClass = hasWallpaper && useDarkGlassSurface
+    ? 'text-white'
+    : 'text-gray-900 dark:text-gray-100';
+  const cardSecondaryTextClass = hasWallpaper && useDarkGlassSurface
+    ? 'text-white/72'
+    : 'text-gray-600 dark:text-gray-400';
+  const glassBorderClass = hasWallpaper
+    ? 'border-white/45 shadow-[0_8px_24px_rgba(15,23,42,0.10)] dark:border-white/10 dark:shadow-[0_6px_18px_rgba(0,0,0,0.18)]'
+    : 'border-gray-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800';
+  const glassHoverClass = hasWallpaper
+    ? 'hover:border-white/70 dark:hover:border-white/20'
+    : 'hover:border-gray-300 hover:shadow-lg dark:hover:border-gray-600';
 
   const hostnameFor = (url: string) => {
     try {
@@ -631,7 +672,7 @@ export default function Categories() {
       setShareResult(result);
       finishToast(t.toastShareCreated);
     } else {
-      finishToast(t.selectAtLeastOne);
+      finishToast(t.selectAtLeastOne, 'error');
     }
   };
 
@@ -677,7 +718,7 @@ export default function Categories() {
   const handleLoadShareCode = async () => {
     const share = await getShare(importCode);
     if (!share) {
-      finishToast(t.noShareFound);
+      finishToast(t.noShareFound, 'error');
       return;
     }
 
@@ -817,7 +858,24 @@ export default function Categories() {
 
   return (
     <>
-      <main className="flex-grow max-w-[1200px] mx-auto px-6 lg:px-20 py-8 w-full">
+      {hasWallpaper && wallpaperUrl && (
+        <>
+          <div
+            className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
+            style={{ backgroundImage: `url(${wallpaperUrl})` }}
+            aria-hidden="true"
+          />
+          <div
+            className={`fixed inset-0 z-0 pointer-events-none ${
+              showDarkWallpaperOverlay
+                ? darkOverlayMode === 'subtle' ? 'bg-black/8' : 'bg-black/20'
+                : 'bg-transparent'
+            }`}
+            aria-hidden="true"
+          />
+        </>
+      )}
+      <main className="relative z-10 flex-grow max-w-[1200px] mx-auto px-6 lg:px-20 py-8 w-full">
         <div className="flex flex-col md:flex-row gap-6 items-start">
         {/* Sidebar Navigation */}
         <motion.aside
@@ -826,25 +884,12 @@ export default function Categories() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="w-full md:w-64 flex-shrink-0"
         >
-          <div className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl p-4 md:p-5 shadow-sm flex flex-col max-h-[48vh] md:max-h-none overflow-hidden transition-colors duration-200">
-            <div className="flex items-center justify-between mb-3 px-0 md:px-2 flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.navigation}</h2>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
-                  title={lang === 'en' ? '切换为中文' : 'Switch to English'}
-                  className="flex items-center gap-1 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-md px-1.5 py-1 transition-colors"
-                >
-                  <span>{lang === 'en' ? '中' : 'EN'}</span>
-                </button>
-                <button
-                  onClick={toggleDark}
-                  title={isDark ? (lang === 'en' ? 'Light mode' : '浅色模式') : (lang === 'en' ? 'Dark mode' : '深色模式')}
-                  className="flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-md p-1 transition-colors"
-                >
-                  {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-                </button>
-              </div>
+          <div
+            style={glassSurfaceStyle}
+            className={`flex max-h-[48vh] flex-col overflow-hidden rounded-xl border p-4 transition-colors duration-200 md:max-h-none md:p-5 ${glassBorderClass}`}
+          >
+            <div className="mb-3 flex flex-shrink-0 items-center px-0 md:px-2">
+              <h2 className={`text-lg font-semibold ${categoryTextClass}`}>{t.navigation}</h2>
             </div>
             <ul className="space-y-1 overflow-y-auto flex-1 min-h-0 pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-300 scrollbar-thin">
               {categories.map((category, index) => (
@@ -853,8 +898,12 @@ export default function Categories() {
                     onClick={() => setSelectedCategoryId(category.id)}
                     className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-3 transition-colors text-sm font-medium ${
                       selectedCategoryId === category.id
-                        ? 'bg-gray-200 dark:bg-zinc-700 text-gray-900 dark:text-gray-100'
-                        : 'hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-400'
+                        ? hasWallpaper
+                          ? `${useDarkGlassSurface ? 'bg-white/16 text-white' : 'bg-white/55 text-gray-950'}`
+                          : 'bg-gray-200 dark:bg-zinc-700 text-gray-900 dark:text-gray-100'
+                        : hasWallpaper
+                          ? `${useDarkGlassSurface ? 'text-white/72 hover:bg-white/10 hover:text-white' : 'text-gray-800 hover:bg-white/40'}`
+                          : 'hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-400'
                     }`}
                   >
                     {categoryIconMap[category.title] || <BookOpen className="w-5 h-5" />}
@@ -883,7 +932,7 @@ export default function Categories() {
                 </li>
               ))}
             </ul>
-            <hr className="my-3 md:my-4 border-gray-200 dark:border-zinc-700 flex-shrink-0" />
+            <hr className={`my-3 flex-shrink-0 md:my-4 ${hasWallpaper ? 'border-white/20 dark:border-white/10' : 'border-gray-200 dark:border-zinc-700'}`} />
             <div className="grid grid-cols-3 gap-2 md:grid-cols-1">
               <button
                 onClick={() => {
@@ -893,7 +942,9 @@ export default function Categories() {
                   }
                   setIsCreatingCategory(true);
                 }}
-                className="flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-300 px-2 text-xs font-medium text-gray-600 transition-all hover:border-gray-400 hover:bg-gray-50 dark:border-zinc-600 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:bg-zinc-700 md:w-full md:gap-2 md:px-4 md:text-sm"
+                className={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-2 text-xs font-medium transition-all md:w-full md:gap-2 md:px-4 md:text-sm ${
+                  hasWallpaper ? `${useDarkGlassSurface ? 'border-white/25 text-white/75 hover:border-white/45 hover:bg-white/10 hover:text-white' : 'border-gray-900/20 text-gray-800 hover:border-gray-900/35 hover:bg-white/40'}` : 'border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50 dark:border-zinc-600 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:bg-zinc-700'
+                }`}
               >
                 <Plus className="h-4 w-4 flex-shrink-0" />
                 <span className="truncate">{t.createCategory}</span>
@@ -901,7 +952,9 @@ export default function Categories() {
               <button
                 onClick={handleRefreshFavicons}
                 disabled={isRefreshingFavicons}
-                className="flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-2 text-xs font-medium text-gray-700 transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600 md:w-full md:gap-2 md:px-4 md:text-sm"
+                className={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 md:w-full md:gap-2 md:px-4 md:text-sm ${
+                  hasWallpaper ? `${useDarkGlassSurface ? 'bg-white/10 text-white/75 hover:bg-white/15 hover:text-white' : 'bg-white/45 text-gray-800 hover:bg-white/60'}` : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600'
+                }`}
                 title="Refresh all website icons"
               >
                 <RefreshCw className={`h-4 w-4 flex-shrink-0 ${isRefreshingFavicons ? 'animate-spin' : ''}`} />
@@ -909,7 +962,9 @@ export default function Categories() {
               </button>
               <button
                 onClick={openImportModal}
-                className="flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-2 text-xs font-medium text-gray-700 transition-all hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600 md:w-full md:gap-2 md:px-4 md:text-sm"
+                className={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-all md:w-full md:gap-2 md:px-4 md:text-sm ${
+                  hasWallpaper ? `${useDarkGlassSurface ? 'bg-white/10 text-white/75 hover:bg-white/15 hover:text-white' : 'bg-white/45 text-gray-800 hover:bg-white/60'}` : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600'
+                }`}
               >
                 <Download className="h-4 w-4 flex-shrink-0" />
                 <span className="truncate">{t.importLinks}</span>
@@ -933,21 +988,21 @@ export default function Categories() {
             className="flex justify-between items-center mb-6"
           >
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{selectedCategory?.title}</h1>
-              <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">{selectedCategory?.description}</p>
+              <h1 className={`text-2xl font-semibold ${categoryTextClass}`}>{selectedCategory?.title}</h1>
+              <p className={`mt-1 text-sm ${mutedTextClass}`}>{selectedCategory?.description}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={openShareModal}
                 disabled={!selectedCategory || selectedCategory.items.length === 0}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-300 dark:hover:bg-zinc-800"
+                className={`rounded-lg p-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${hasWallpaper ? `${mutedTextClass} ${useDarkGlassSurface ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-white/35 hover:text-gray-950'}` : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-zinc-800'}`}
                 title={t.shareCategoryLabel}
               >
                 <Share2 className="w-5 h-5" />
               </button>
               <button
                 onClick={() => selectedCategory && startEditCategory(selectedCategory)}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-300 dark:hover:bg-zinc-800"
+                className={`rounded-lg p-2 transition-colors ${hasWallpaper ? `${mutedTextClass} ${useDarkGlassSurface ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-white/35 hover:text-gray-950'}` : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-zinc-800'}`}
                 title={t.editCategoryLabel}
               >
                 <Edit2 className="w-5 h-5" />
@@ -974,11 +1029,16 @@ export default function Categories() {
                 whileTap={{ scale: 0.98 }}
                 data-card
                 onClick={() => setActiveCardId(item.id)}
-                className="min-h-[136px] md:min-h-[164px] bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl p-3 md:p-5 flex flex-col justify-between group hover:shadow-lg transition-all duration-200 cursor-pointer"
+                style={glassSurfaceStyle}
+                className={`group flex min-h-[136px] cursor-pointer flex-col justify-between rounded-xl border p-3 transition-all duration-200 md:min-h-[164px] md:p-5 ${glassBorderClass} ${glassHoverClass}`}
               >
                 <div>
                   <div className="flex justify-between items-start mb-2 md:mb-3">
-                    <div className="w-9 h-9 md:w-12 md:h-12 rounded-lg bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 flex items-center justify-center overflow-hidden p-1.5 md:p-2 flex-shrink-0">
+                    <div className={`w-9 h-9 md:w-12 md:h-12 rounded-lg border flex items-center justify-center overflow-hidden p-1.5 md:p-2 flex-shrink-0 ${
+                      hasWallpaper
+                        ? 'border-white/55 bg-white/70 shadow-sm dark:border-white/10 dark:bg-white/10'
+                        : 'bg-white dark:bg-zinc-700 border-gray-200 dark:border-zinc-600'
+                    }`}>
                       <SiteFavicon item={item} />
                     </div>
                     <div className={`flex gap-0.5 transition-opacity ${activeCardId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
@@ -1000,11 +1060,13 @@ export default function Categories() {
                       </button>
                     </div>
                   </div>
-                  <h3 className="text-sm md:text-lg font-semibold mb-1 truncate text-gray-900 dark:text-gray-100" title={item.name}>{item.name}</h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-xs md:text-sm leading-relaxed mb-2 md:mb-4 line-clamp-2" title={item.description}>{item.description}</p>
+                  <h3 className={`mb-1 truncate text-sm font-semibold md:text-lg ${cardPrimaryTextClass}`} title={item.name}>{item.name}</h3>
+                  <p className={`mb-2 line-clamp-2 text-xs leading-relaxed md:mb-4 md:text-sm ${cardSecondaryTextClass}`} title={item.description}>{item.description}</p>
                 </div>
                 <div className="flex items-center justify-between mt-1 md:mt-2">
-                  <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded uppercase tracking-wide truncate max-w-[70%]" title={new URL(item.url).hostname}>
+                  <span className={`max-w-[70%] truncate rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${
+                    hasWallpaper && useDarkGlassSurface ? 'bg-white/10 text-white/65' : 'bg-gray-100 text-gray-500 dark:bg-zinc-700 dark:text-gray-400'
+                  }`} title={new URL(item.url).hostname}>
                     {new URL(item.url).hostname}
                   </span>
                   <button
@@ -1021,10 +1083,10 @@ export default function Categories() {
                       document.body.removeChild(textarea);
                       finishToast(t.toastCopied);
                     }}
-                    className="hover:bg-gray-100 dark:hover:bg-zinc-700 p-1 rounded transition-colors flex-shrink-0"
+                    className={`flex-shrink-0 rounded p-1 transition-colors ${hasWallpaper ? `${faintTextClass} ${useDarkGlassSurface ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-white/35 hover:text-gray-950'}` : 'hover:bg-gray-100 dark:hover:bg-zinc-700'}`}
                     title={t.copyLink}
                   >
-                    <Copy className="w-3.5 h-3.5 text-gray-400" />
+                    <Copy className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </motion.div>
@@ -1033,13 +1095,22 @@ export default function Categories() {
             {/* Add New Link Placeholder — always visible */}
             <button
               onClick={startAddNew}
-              className="col-span-2 min-h-[136px] border-2 border-dashed border-gray-300 p-4 text-gray-600 transition-all hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:bg-zinc-800 lg:col-span-3 md:min-h-[164px] rounded-xl flex flex-col items-center justify-center group"
+              style={glassSurfaceStyle}
+              className={`col-span-2 flex min-h-[136px] flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 transition-all group md:min-h-[164px] lg:col-span-3 ${
+                hasWallpaper
+                  ? `${useDarkGlassSurface ? 'border-white/25 text-white/75 hover:border-white/45 hover:bg-white/10 hover:text-white' : 'border-gray-900/20 text-gray-800 hover:border-gray-900/35 hover:bg-white/40'}`
+                  : 'border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:bg-zinc-800'
+              }`}
             >
-              <div className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-gray-100 dark:bg-zinc-700 flex items-center justify-center mb-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors">
+              <div className={`mb-2 flex h-10 w-10 items-center justify-center rounded-full transition-colors md:h-11 md:w-11 ${
+                hasWallpaper
+                  ? `${useDarkGlassSurface ? 'bg-white/10 group-hover:bg-white/15' : 'bg-white/45 group-hover:bg-white/60'}`
+                  : 'bg-gray-100 group-hover:bg-gray-200 dark:bg-zinc-700 dark:group-hover:bg-zinc-600'
+              }`}>
                 <Plus className="w-5 h-5 md:w-6 md:h-6" />
               </div>
               <span className="font-semibold text-sm md:text-base">{t.addNewSite}</span>
-              <span className="text-xs md:text-sm text-gray-500 mt-0.5 md:mt-1 hidden sm:block">{t.configureHint}</span>
+              <span className={`mt-0.5 hidden text-xs md:mt-1 md:text-sm sm:block ${faintTextClass}`}>{t.configureHint}</span>
             </button>
           </div>
 
@@ -1360,7 +1431,7 @@ export default function Categories() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.shareCode}</p>
                   <p className="mt-1 font-mono text-2xl font-semibold tracking-widest text-gray-900 dark:text-gray-100">{shareResult.code}</p>
                 </div>
-                <ShareAuthor name={shareResult.sharerName} avatarUrl={shareResult.sharerAvatarUrl} />
+                <ShareAuthor name={shareResult.sharerName} avatarUrl={profile?.avatar_url || shareResult.sharerAvatarUrl} />
               </div>
               <p className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                 <Clock3 className="h-3.5 w-3.5" />
@@ -1373,7 +1444,7 @@ export default function Categories() {
             <button
               type="button"
               onClick={() => { void closeShareModal(); }}
-              className="px-5 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+              className="flex h-10 items-center gap-2 rounded-lg px-6 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-zinc-700"
             >
               <X className="w-4 h-4" />
               {t.cancel}
@@ -1382,7 +1453,7 @@ export default function Categories() {
               type="button"
               onClick={shareResult ? handleCopyShareCode : handleCreateShareCode}
               disabled={!shareResult && (shareSelectedIds.size === 0 || isGeneratingShare)}
-              className={`px-5 py-2 text-sm font-medium flex items-center gap-2 ${primaryButtonClass}`}
+              className={`flex h-10 items-center gap-2 px-6 text-sm font-medium ${primaryButtonClass}`}
             >
               {shareResult ? <Copy className="w-4 h-4" /> : isGeneratingShare ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
               {shareResult ? t.copyLink : shareSelectedIds.size === 0 ? t.selectAtLeastOne : t.generateCode}
@@ -1550,7 +1621,7 @@ export default function Categories() {
             <button
               type="button"
               onClick={() => setIsImportingShare(false)}
-              className="px-5 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+              className="flex h-10 items-center gap-2 rounded-lg px-6 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-zinc-700"
             >
               <X className="w-4 h-4" />
               {t.cancel}
@@ -1559,7 +1630,7 @@ export default function Categories() {
               type="button"
               onClick={handleImportPrimaryAction}
               disabled={!loadedShare ? !importCode.trim() : importSelectedIds.size === 0}
-              className={`px-5 py-2 text-sm font-medium flex items-center gap-2 ${primaryButtonClass}`}
+              className={`flex h-10 items-center gap-2 px-6 text-sm font-medium ${primaryButtonClass}`}
             >
               {loadedShare ? <Download className="w-4 h-4" /> : <KeyRound className="w-4 h-4" />}
               {loadedShare ? t.importSelected : t.loadShareCode}
@@ -1593,14 +1664,18 @@ export default function Categories() {
     </div>
 
     {/* 页脚 */}
-    <footer className="bg-gray-100 dark:bg-zinc-900 border-t border-gray-200 dark:border-zinc-800 mt-auto transition-colors duration-200">
+    <footer className={`relative z-10 mt-auto border-t transition-colors duration-200 ${
+      hasWallpaper
+        ? 'border-transparent bg-transparent'
+        : 'border-gray-200 bg-gray-100 dark:border-zinc-800 dark:bg-zinc-900'
+    }`}>
       <div className="max-w-[1200px] mx-auto px-8 py-12 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-        <p className="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t.footer}</p>
-        <div className="flex items-center gap-8">
-          <a href="#" className="text-xs text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 transition-colors uppercase tracking-widest">{t.privacy}</a>
-          <a href="#" className="text-xs text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 transition-colors uppercase tracking-widest">{t.terms}</a>
-          <a href="#" className="text-xs text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 transition-colors uppercase tracking-widest">{t.docs}</a>
-          <a href="#" className="text-xs text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 transition-colors uppercase tracking-widest">{t.help}</a>
+        <p className={`text-xs uppercase tracking-widest ${hasWallpaper ? categoryTextClass : 'text-gray-600 dark:text-gray-400'}`}>{t.footer}</p>
+        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+          <RouterLink to="/privacy" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>{t.privacy}</RouterLink>
+          <RouterLink to="/terms" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>{t.terms}</RouterLink>
+          <RouterLink to="/docs" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>{t.docs}</RouterLink>
+          <RouterLink to="/help" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>{t.help}</RouterLink>
         </div>
       </div>
     </footer>
