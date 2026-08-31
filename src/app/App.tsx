@@ -4,7 +4,9 @@ import { CheckCircle2, ChevronDown, Diamond, ExternalLink, Grid2X2, KeyRound, La
 import type { Session } from '@supabase/supabase-js';
 import Home from './components/Home';
 import Categories from './components/Categories';
+import WallpaperDialog from './components/WallpaperDialog';
 import { supabase } from './lib/supabase';
+import { CUSTOM_WALLPAPER_ID, DEFAULT_CARD_OPACITY, DEFAULT_WALLPAPER_ID, WALLPAPERS, clampCardOpacity, getWallpaperById } from './wallpapers';
 
 // ─── Language context ─────────────────────────────────────────────────────────
 
@@ -52,6 +54,41 @@ export const MembershipContext = createContext<{
   openUpgradeDialog: () => {},
 });
 
+export type WallpaperSettings = {
+  wallpaperId: string;
+  customWallpaperPath: string | null;
+  customWallpaperUrl: string | null;
+  cardOpacity: number;
+  loading: boolean;
+};
+
+export type WallpaperSaveInput = {
+  wallpaperId: string;
+  customWallpaperPath?: string | null;
+  customWallpaperUrl?: string | null;
+  cardOpacity: number;
+};
+
+export const DEFAULT_WALLPAPER_SETTINGS: WallpaperSettings = {
+  wallpaperId: DEFAULT_WALLPAPER_ID,
+  customWallpaperPath: null,
+  customWallpaperUrl: null,
+  cardOpacity: DEFAULT_CARD_OPACITY,
+  loading: true,
+};
+
+export const WallpaperContext = createContext<{
+  settings: WallpaperSettings;
+  refreshWallpaperSettings: () => Promise<void>;
+  saveWallpaperSettings: (input: WallpaperSaveInput) => Promise<{ error?: string }>;
+  uploadCustomWallpaper: (file: File) => Promise<{ path?: string; url?: string; error?: string }>;
+}>({
+  settings: DEFAULT_WALLPAPER_SETTINGS,
+  refreshWallpaperSettings: async () => {},
+  saveWallpaperSettings: async () => ({ error: 'Wallpaper service unavailable.' }),
+  uploadCustomWallpaper: async () => ({ error: 'Wallpaper upload unavailable.' }),
+});
+
 type UserProfile = {
   id: string;
   display_name: string;
@@ -62,6 +99,56 @@ type ProfilePatch = {
   display_name?: string;
   avatar_url?: string | null;
 };
+
+const WALLPAPER_CACHE_KEY = 'dash-wallpaper-settings';
+
+const getCustomWallpaperUrl = (path: string | null | undefined) => {
+  if (!path) return null;
+  return supabase.storage.from('wallpapers').getPublicUrl(path).data.publicUrl;
+};
+
+const normalizeWallpaperSettings = (input: Partial<WallpaperSettings>): WallpaperSettings => {
+  const wallpaperId = typeof input.wallpaperId === 'string' ? input.wallpaperId : DEFAULT_WALLPAPER_ID;
+  const knownWallpaper = wallpaperId === CUSTOM_WALLPAPER_ID || wallpaperId === DEFAULT_WALLPAPER_ID || Boolean(getWallpaperById(wallpaperId));
+  const nextId = knownWallpaper ? wallpaperId : DEFAULT_WALLPAPER_ID;
+  const customPath = typeof input.customWallpaperPath === 'string' && input.customWallpaperPath.trim()
+    ? input.customWallpaperPath.trim()
+    : null;
+
+  return {
+    wallpaperId: nextId,
+    customWallpaperPath: customPath,
+    customWallpaperUrl: typeof input.customWallpaperUrl === 'string' && input.customWallpaperUrl.trim()
+      ? input.customWallpaperUrl.trim()
+      : getCustomWallpaperUrl(customPath),
+    cardOpacity: clampCardOpacity(Number(input.cardOpacity ?? DEFAULT_CARD_OPACITY)),
+    loading: Boolean(input.loading),
+  };
+};
+
+const readCachedWallpaperSettings = (): WallpaperSettings => {
+  try {
+    const raw = localStorage.getItem(WALLPAPER_CACHE_KEY);
+    if (!raw) return DEFAULT_WALLPAPER_SETTINGS;
+    return normalizeWallpaperSettings({ ...JSON.parse(raw), loading: true });
+  } catch {
+    return DEFAULT_WALLPAPER_SETTINGS;
+  }
+};
+
+const cacheWallpaperSettings = (settings: WallpaperSettings) => {
+  try {
+    localStorage.setItem(WALLPAPER_CACHE_KEY, JSON.stringify({
+      wallpaperId: settings.wallpaperId,
+      customWallpaperPath: settings.customWallpaperPath,
+      customWallpaperUrl: settings.customWallpaperUrl,
+      cardOpacity: settings.cardOpacity,
+    }));
+  } catch {}
+};
+
+const isBuiltInLifetimeWallpaper = (wallpaperId: string) =>
+  WALLPAPERS.some((wallpaper) => wallpaper.id === wallpaperId && wallpaper.access === 'lifetime');
 
 // ─── Nav labels ───────────────────────────────────────────────────────────────
 
@@ -296,6 +383,7 @@ function NavBar() {
   const { summary, openUpgradeDialog } = useContext(MembershipContext);
   const [accountOpen, setAccountOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [avatarInput, setAvatarInput] = useState('');
   const [profileStatus, setProfileStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -443,7 +531,8 @@ function NavBar() {
                   <button
                     type="button"
                     onClick={() => {
-                      showProfileToast('done', accountLabels.comingSoon);
+                      setAccountOpen(false);
+                      setWallpaperOpen(true);
                     }}
                     className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
                   >
@@ -516,6 +605,10 @@ function NavBar() {
         setEditProfileOpen(false);
         openUpgradeDialog();
       }}
+    />
+    <WallpaperDialog
+      open={wallpaperOpen}
+      onClose={() => setWallpaperOpen(false)}
     />
     </>
   );
@@ -1143,6 +1236,7 @@ export default function App() {
     linkCount: 0,
     loading: true,
   });
+  const [wallpaperSettings, setWallpaperSettings] = useState<WallpaperSettings>(() => readCachedWallpaperSettings());
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
@@ -1275,8 +1369,107 @@ export default function App() {
     };
   };
 
+  const refreshWallpaperSettings = async () => {
+    if (!session) {
+      setWallpaperSettings((current) => ({ ...current, loading: false }));
+      return;
+    }
+
+    setWallpaperSettings((current) => ({ ...current, loading: true }));
+
+    const { data, error } = await supabase.rpc('get_wallpaper_setting');
+    if (error) {
+      console.error('Error loading wallpaper settings:', error);
+      setWallpaperSettings((current) => ({ ...current, loading: false }));
+      return;
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const next = normalizeWallpaperSettings({
+      wallpaperId: row?.wallpaper_id ?? DEFAULT_WALLPAPER_ID,
+      customWallpaperPath: row?.custom_wallpaper_path ?? null,
+      cardOpacity: Number(row?.card_opacity ?? DEFAULT_CARD_OPACITY),
+      loading: false,
+    });
+    setWallpaperSettings(next);
+    cacheWallpaperSettings(next);
+  };
+
+  const saveWallpaperSettings = async (input: WallpaperSaveInput) => {
+    if (!session) return { error: 'Not signed in' };
+
+    const wallpaper = getWallpaperById(input.wallpaperId);
+    if ((input.wallpaperId === CUSTOM_WALLPAPER_ID || isBuiltInLifetimeWallpaper(input.wallpaperId)) && membershipSummary.plan !== 'lifetime') {
+      setUpgradeOpen(true);
+      return { error: 'Membership required' };
+    }
+
+    if (input.wallpaperId !== DEFAULT_WALLPAPER_ID && input.wallpaperId !== CUSTOM_WALLPAPER_ID && !wallpaper) {
+      return { error: 'Invalid wallpaper' };
+    }
+
+    const { data, error } = await supabase.rpc('save_wallpaper_setting', {
+      p_wallpaper_id: input.wallpaperId,
+      p_custom_wallpaper_path: input.wallpaperId === CUSTOM_WALLPAPER_ID ? input.customWallpaperPath ?? null : null,
+      p_card_opacity: clampCardOpacity(input.cardOpacity),
+    });
+
+    if (error) {
+      console.error('Error saving wallpaper settings:', error);
+      return { error: error.message };
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const next = normalizeWallpaperSettings({
+      wallpaperId: row?.wallpaper_id ?? input.wallpaperId,
+      customWallpaperPath: row?.custom_wallpaper_path ?? (input.wallpaperId === CUSTOM_WALLPAPER_ID ? input.customWallpaperPath ?? null : null),
+      customWallpaperUrl: input.wallpaperId === CUSTOM_WALLPAPER_ID ? input.customWallpaperUrl ?? null : null,
+      cardOpacity: Number(row?.card_opacity ?? input.cardOpacity),
+      loading: false,
+    });
+    setWallpaperSettings(next);
+    cacheWallpaperSettings(next);
+    return {};
+  };
+
+  const uploadCustomWallpaper = async (file: File) => {
+    if (!session) return { error: 'Not signed in' };
+    if (membershipSummary.plan !== 'lifetime') {
+      setUpgradeOpen(true);
+      return { error: 'Membership required' };
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      return { error: 'Unsupported image type' };
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return { error: 'Image must be smaller than 5MB' };
+    }
+
+    const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+    const path = `${session.user.id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+    const { error } = await supabase.storage
+      .from('wallpapers')
+      .upload(path, file, {
+        cacheControl: '31536000',
+        contentType: file.type,
+        upsert: false,
+      });
+
+    if (error) {
+      console.error('Error uploading wallpaper:', error);
+      return { error: error.message };
+    }
+
+    const url = getCustomWallpaperUrl(path);
+    return url ? { path, url } : { error: 'Could not create wallpaper URL' };
+  };
+
   useEffect(() => {
     void refreshMembership();
+  }, [session?.user.id]);
+
+  useEffect(() => {
+    void refreshWallpaperSettings();
   }, [session?.user.id]);
 
   useEffect(() => {
@@ -1320,27 +1513,36 @@ export default function App() {
               openUpgradeDialog: () => setUpgradeOpen(true),
             }}
           >
-            {authLoading ? (
-              <LoadingScreen />
-            ) : passwordRecovery ? (
-              <PasswordResetScreen onDone={(notice) => {
-                setPasswordRecovery(false);
-                setAuthNotice(notice);
-              }} />
-            ) : !session ? (
-              <AuthScreen notice={authNotice} />
-            ) : (
-              <BrowserRouter>
-                <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-zinc-900 flex flex-col transition-colors duration-200">
-                  <NavBar />
-                  <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/categories" element={<Categories />} />
-                  </Routes>
-                </div>
-              </BrowserRouter>
-            )}
-            <UpgradeDialog open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+            <WallpaperContext.Provider
+              value={{
+                settings: wallpaperSettings,
+                refreshWallpaperSettings,
+                saveWallpaperSettings,
+                uploadCustomWallpaper,
+              }}
+            >
+              {authLoading ? (
+                <LoadingScreen />
+              ) : passwordRecovery ? (
+                <PasswordResetScreen onDone={(notice) => {
+                  setPasswordRecovery(false);
+                  setAuthNotice(notice);
+                }} />
+              ) : !session ? (
+                <AuthScreen notice={authNotice} />
+              ) : (
+                <BrowserRouter>
+                  <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-zinc-900 flex flex-col transition-colors duration-200">
+                    <NavBar />
+                    <Routes>
+                      <Route path="/" element={<Home />} />
+                      <Route path="/categories" element={<Categories />} />
+                    </Routes>
+                  </div>
+                </BrowserRouter>
+              )}
+              <UpgradeDialog open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+            </WallpaperContext.Provider>
           </MembershipContext.Provider>
         </AuthContext.Provider>
       </LangContext.Provider>

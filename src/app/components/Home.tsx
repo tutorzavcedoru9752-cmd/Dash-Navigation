@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { Search, Sun, BookOpen, Sparkles, PlayCircle, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Cloud, CloudRain, CloudSnow, Wind, Link, Code, Terminal, Database, Settings, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, ChevronDown, ChevronUp, X, MapPin, ExternalLink, Mail } from 'lucide-react';
 import { useCategories } from '../hooks/useCategories';
-import { LangContext } from '../App';
+import { LangContext, ThemeContext, WallpaperContext } from '../App';
 import { motion } from 'motion/react';
+import { CUSTOM_WALLPAPER_ID, DEFAULT_WALLPAPER_ID, clampCardOpacity, getWallpaperById } from '../wallpapers';
 
 const iconMap: Record<string, React.ReactNode> = {
   'book': <Library className="w-5 h-5" />,
@@ -166,6 +167,8 @@ async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 3500): Promise<T
 
 export default function Home() {
   const { lang } = useContext(LangContext);
+  const { isDark } = useContext(ThemeContext);
+  const { settings: wallpaperSettings } = useContext(WallpaperContext);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchEngine, setSearchEngine] = useState<'google' | 'baidu'>(() => {
     try { return (localStorage.getItem('searchEngine') as 'google' | 'baidu') || 'google'; } catch { return 'google'; }
@@ -198,6 +201,19 @@ export default function Home() {
   const [navHeight, setNavHeight] = useState(64);
   const dragOffset = useRef({ x: 0, y: 0 });
   const didDrag = useRef(false);
+  const builtInWallpaper = getWallpaperById(wallpaperSettings.wallpaperId);
+  const wallpaperUrl = wallpaperSettings.wallpaperId === CUSTOM_WALLPAPER_ID
+    ? wallpaperSettings.customWallpaperUrl
+    : builtInWallpaper?.src;
+  const hasWallpaper = Boolean(wallpaperUrl && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
+  const cardOpacity = clampCardOpacity(wallpaperSettings.cardOpacity);
+  const glassCardStyle = hasWallpaper
+    ? {
+        backgroundColor: isDark ? `rgba(24, 24, 27, ${Math.max(cardOpacity, 0.58)})` : `rgba(255, 255, 255, ${cardOpacity})`,
+        backdropFilter: 'blur(22px) saturate(1.35)',
+        WebkitBackdropFilter: 'blur(22px) saturate(1.35)',
+      }
+    : undefined;
 
   useEffect(() => {
     const nav = document.querySelector('nav');
@@ -571,8 +587,17 @@ export default function Home() {
 
   return (
     <>
+      {hasWallpaper && (
+        <>
+          <div
+            className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-300"
+            style={{ backgroundImage: `url(${wallpaperUrl})` }}
+          />
+          <div className="pointer-events-none fixed inset-0 z-0 bg-white/35 transition-colors duration-300 dark:bg-black/60" />
+        </>
+      )}
       {/* 主要内容 */}
-      <main className="max-w-[1200px] mx-auto px-6 lg:px-20 py-8">
+      <main className="relative z-10 max-w-[1200px] mx-auto px-6 lg:px-20 py-8">
         {/* 搜索区域 */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -584,7 +609,9 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2, duration: 0.5 }}
-            className="flex items-center gap-3 mb-4 text-gray-700 dark:text-gray-300 text-sm font-light"
+            className={`flex items-center gap-3 mb-4 text-sm font-light ${
+              hasWallpaper ? 'text-gray-800 drop-shadow-sm dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
+            }`}
           >
             <span>{getCurrentDate()}</span>
             {loadingWeather ? (
@@ -618,7 +645,11 @@ export default function Home() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={searchEngine === 'google' ? 'Search with Google...' : (lang === 'en' ? 'Search with Baidu...' : '百度一下...')}
-              className="w-full pl-11 pr-14 py-3 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-gray-100/10 focus:border-gray-900 dark:focus:border-gray-400 focus:shadow-md transition-all duration-300 shadow-sm text-base"
+              className={`w-full pl-11 pr-14 py-3 border rounded-lg text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-gray-100/10 focus:border-gray-900 dark:focus:border-gray-400 focus:shadow-md transition-all duration-300 shadow-sm text-base ${
+                hasWallpaper
+                  ? 'border-white/55 bg-white/75 shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/65'
+                  : 'bg-white dark:bg-zinc-800 border-gray-300 dark:border-zinc-600'
+              }`}
             />
             {/* Search engine selector */}
             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -679,19 +710,23 @@ export default function Home() {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.5 + categoryIndex * 0.1, duration: 0.4 }}
-                    className="flex items-center gap-3 border-b border-gray-300 dark:border-zinc-700 pb-2"
+                    className={`flex items-center gap-3 border-b pb-2 ${
+                      hasWallpaper ? 'border-white/45 dark:border-white/10' : 'border-gray-300 dark:border-zinc-700'
+                    }`}
                   >
-                    <div className="text-gray-900 dark:text-gray-100">{categoryIcon}</div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex-1">{category.title}</h2>
+                    <div className={hasWallpaper ? 'text-gray-950 drop-shadow-sm dark:text-white' : 'text-gray-900 dark:text-gray-100'}>{categoryIcon}</div>
+                    <h2 className={`text-lg font-semibold flex-1 ${hasWallpaper ? 'text-gray-950 drop-shadow-sm dark:text-white' : 'text-gray-900 dark:text-gray-100'}`}>{category.title}</h2>
                     <button
                       onClick={() => toggleCategory(category.id)}
-                      className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+                      className={`p-1 rounded-md transition-colors ${
+                        hasWallpaper ? 'text-gray-900 hover:bg-white/40 dark:text-white dark:hover:bg-white/10' : 'hover:bg-gray-100 dark:hover:bg-zinc-800'
+                      }`}
                       aria-label={collapsedCategories.has(category.id) ? "Expand category" : "Collapse category"}
                     >
                       {collapsedCategories.has(category.id) ? (
-                        <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                        <ChevronDown className={`w-5 h-5 ${hasWallpaper ? '' : 'text-gray-600 dark:text-gray-400'}`} />
                       ) : (
-                        <ChevronUp className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                        <ChevronUp className={`w-5 h-5 ${hasWallpaper ? '' : 'text-gray-600 dark:text-gray-400'}`} />
                       )}
                     </button>
                   </motion.div>
@@ -712,13 +747,22 @@ export default function Home() {
                         onPointerEnter={() => preconnectTo(item.url)}
                         onFocus={() => preconnectTo(item.url)}
                         onTouchStart={() => preconnectTo(item.url)}
-                        className={`min-h-[82px] bg-white dark:bg-zinc-800 p-4 rounded-lg shadow-sm border hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex items-center gap-3 ${
+                        style={glassCardStyle}
+                        className={`min-h-[82px] p-4 rounded-lg border hover:shadow-lg hover:scale-[1.02] transition-all duration-200 flex items-center gap-3 ${
+                          hasWallpaper ? '' : 'bg-white shadow-sm dark:bg-zinc-800'
+                        } ${
                           highlightedSiteId === item.id
                             ? 'border-blue-400 ring-2 ring-blue-300 shadow-blue-100 dark:border-sky-300 dark:bg-sky-400/10 dark:ring-sky-400/35 dark:shadow-sky-950/30'
-                            : 'border-transparent dark:border-zinc-700 hover:border-gray-300 dark:hover:border-gray-600'
+                            : hasWallpaper
+                              ? 'border-white/45 shadow-[0_8px_24px_rgba(15,23,42,0.10)] hover:border-white/70 dark:border-white/10 dark:shadow-[0_8px_24px_rgba(0,0,0,0.25)] dark:hover:border-white/20'
+                              : 'bg-white dark:bg-zinc-800 border-transparent dark:border-zinc-700 hover:border-gray-300 dark:hover:border-gray-600'
                         }`}
                       >
-                        <div className="w-10 h-10 rounded-lg bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 flex items-center justify-center flex-shrink-0 overflow-hidden p-2">
+                        <div className={`w-10 h-10 rounded-lg border flex items-center justify-center flex-shrink-0 overflow-hidden p-2 ${
+                          hasWallpaper
+                            ? 'border-white/55 bg-white/70 shadow-sm dark:border-white/10 dark:bg-white/10'
+                            : 'bg-white dark:bg-zinc-700 border-gray-200 dark:border-zinc-600'
+                        }`}>
                           <FaviconImage
                             src={item.faviconUrl}
                             alt={`${item.name} favicon`}
@@ -726,8 +770,8 @@ export default function Home() {
                           />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-base font-semibold leading-[22px] text-gray-900 dark:text-gray-100 truncate" title={item.name}>{item.name}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 tracking-wide truncate" title={item.description}>{item.description}</p>
+                          <p className={`text-base font-semibold leading-[22px] truncate ${hasWallpaper ? 'text-gray-950 dark:text-white' : 'text-gray-900 dark:text-gray-100'}`} title={item.name}>{item.name}</p>
+                          <p className={`text-xs tracking-wide truncate ${hasWallpaper ? 'text-gray-700 dark:text-zinc-200' : 'text-gray-500 dark:text-gray-400'}`} title={item.description}>{item.description}</p>
                         </div>
                       </motion.a>
                     ))}
