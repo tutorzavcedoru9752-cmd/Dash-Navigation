@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Check, CheckCircle2, Diamond, Image, Loader2, Lock, Upload, X } from 'lucide-react';
 import { LangContext, MembershipContext, ThemeContext, WallpaperContext } from '../App';
+import { PreviewContext } from '../preview';
 import {
   CUSTOM_WALLPAPER_ID,
   DEFAULT_CARD_OPACITY,
@@ -57,6 +58,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
   const { isDark } = useContext(ThemeContext);
   const { summary, openUpgradeDialog } = useContext(MembershipContext);
   const { settings, saveWallpaperSettings, uploadCustomWallpaper } = useContext(WallpaperContext);
+  const { isPreview, requestLogin } = useContext(PreviewContext);
   const t = WALLPAPER_LABELS[lang];
   const isLifetime = summary.plan === 'lifetime';
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -108,7 +110,8 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
 
   const handleLockedChoice = () => {
     onClose();
-    openUpgradeDialog();
+    if (isPreview) requestLogin('membership');
+    else openUpgradeDialog();
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,7 +163,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-4 py-6 sm:items-center">
+    <div className="dash-scrollbar fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-4 py-6 sm:items-center">
       <button
         type="button"
         aria-label="Close wallpaper dialog"
@@ -169,7 +172,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
       />
       <section
         style={dialogSurfaceStyle}
-        className={`relative max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border p-4 shadow-2xl sm:p-6 ${
+        className={`relative h-[550px] max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border p-4 shadow-2xl dash-scrollbar sm:p-6 ${
           hasWallpaper
             ? 'border-white/35 dark:border-white/10'
             : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
@@ -180,7 +183,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.title}</h2>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-5">
           <div>
             <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3">
               {WALLPAPERS.map((wallpaper) => {
@@ -212,16 +215,16 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
                         decoding="async"
                         className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
                       />
-                      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/65 to-transparent p-2 sm:gap-3 sm:p-3">
+                      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-1.5 bg-gradient-to-t from-black/65 to-transparent p-1.5 sm:gap-3 sm:p-3">
                         <div className="min-w-0">
-                          <p className="truncate text-xs font-semibold text-white sm:text-sm">{wallpaper.name[lang]}</p>
+                          <p className="truncate text-[11px] font-semibold text-white sm:text-sm">{wallpaper.name[lang]}</p>
                         </div>
-                        <span className="inline-flex h-5 flex-shrink-0 items-center gap-1 rounded-full bg-white/90 px-2 text-[10px] font-normal text-gray-900 sm:h-[22px] sm:px-2.5">
+                        <span className="inline-flex h-[18px] flex-shrink-0 items-center gap-0.5 rounded-full bg-white/90 px-1.5 text-[9px] font-normal text-gray-900 sm:h-[22px] sm:gap-1 sm:px-2.5 sm:text-[10px]">
                           {locked ? <Lock className="h-3 w-3" /> : wallpaper.access === 'lifetime' ? <Diamond className="h-3 w-3" /> : null}
                           {wallpaper.access === 'lifetime' ? t.lifetime : t.free}
                         </span>
                       </div>
-                      <span className={`absolute right-2 top-2 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border sm:right-3 sm:top-3 ${
+                      <span className={`absolute right-1.5 top-1.5 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full border sm:right-3 sm:top-3 sm:h-5 sm:w-5 ${
                         selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-white/75 bg-white/20 text-transparent'
                       }`}>
                         {selected && <Check className="h-3 w-3" />}
@@ -234,20 +237,20 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
               <button
                 type="button"
                 onClick={() => isLifetime ? fileInputRef.current?.click() : handleLockedChoice()}
-                className={`group flex aspect-video flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-2 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 sm:gap-2 sm:px-4 ${
+                className={`group flex aspect-video flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-1.5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 sm:gap-2 sm:px-4 ${
                   draftWallpaperId === CUSTOM_WALLPAPER_ID
                     ? 'border-gray-900 bg-gray-50 dark:border-zinc-100 dark:bg-zinc-800'
                     : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:bg-zinc-800/60 dark:hover:border-zinc-500 dark:hover:bg-zinc-800'
                 }`}
                 style={draftCustomUrl ? { backgroundImage: `linear-gradient(rgba(0,0,0,.32), rgba(0,0,0,.32)), url(${draftCustomUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : customWallpaperSurfaceStyle}
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm transition group-hover:bg-gray-100 dark:bg-zinc-900 dark:text-zinc-200 dark:group-hover:bg-zinc-700 sm:h-11 sm:w-11">
-                  {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : isLifetime ? <Upload className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm transition group-hover:bg-gray-100 dark:bg-zinc-900 dark:text-zinc-200 dark:group-hover:bg-zinc-700 sm:h-11 sm:w-11">
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" /> : isLifetime ? <Upload className="h-4 w-4 sm:h-5 sm:w-5" /> : <Lock className="h-4 w-4 sm:h-5 sm:w-5" />}
                 </span>
-                <span className={`text-xs font-semibold sm:text-sm ${draftCustomUrl ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
+                <span className={`text-[11px] font-semibold sm:text-sm ${draftCustomUrl ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
                   {t.custom}
                 </span>
-                <span className={`text-[11px] sm:text-xs ${draftCustomUrl ? 'text-white/75' : 'text-gray-500 dark:text-gray-400'}`}>
+                <span className={`text-[10px] sm:text-xs ${draftCustomUrl ? 'text-white/75' : 'text-gray-500 dark:text-gray-400'}`}>
                   {isLifetime ? t.upload : t.locked}
                 </span>
               </button>
@@ -261,8 +264,8 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
             />
           </div>
 
-          <div className={`rounded-lg p-4 ${hasWallpaper ? (useDarkSurface ? 'bg-white/10' : 'bg-white/45') : 'bg-gray-100 dark:bg-zinc-800'}`}>
-            <div className="mb-3 flex items-center justify-between">
+          <div className={`box-border h-[85px] rounded-lg p-4 ${hasWallpaper ? (useDarkSurface ? 'bg-white/10' : 'bg-white/45') : 'bg-gray-100 dark:bg-zinc-800'}`}>
+            <div className="mb-2.5 flex items-center justify-between">
               <label className={`text-xs font-semibold uppercase tracking-wide ${useDarkSurface ? 'text-white/75' : 'text-gray-700 dark:text-gray-300'}`}>{t.opacity}</label>
               <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{opacityPercent}%</span>
             </div>
@@ -281,7 +284,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
             />
           </div>
 
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}

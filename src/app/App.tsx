@@ -1,11 +1,13 @@
 import { createContext, useContext, useState, useRef, useEffect, type CSSProperties } from 'react';
-import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router';
-import { CheckCircle2, ChevronDown, ExternalLink, Gem, Grid2X2, KeyRound, Languages, Loader2, Lock, LogOut, Mail, PanelTop, Pencil, Settings, Sparkles, Sun, Moon, Upload, UserRound, X } from 'lucide-react';
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useNavigate } from 'react-router';
+import { ArrowLeft, CheckCircle2, ChevronDown, ExternalLink, Gem, Grid2X2, KeyRound, Languages, Loader2, Lock, LogOut, Mail, PanelTop, Pencil, Settings, Sparkles, Sun, Moon, Trash2, Upload, UserRound, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import Home from './components/Home';
 import Categories from './components/Categories';
 import WallpaperDialog from './components/WallpaperDialog';
 import { supabase } from './lib/supabase';
+import { getTurnstileToken } from './lib/turnstile';
+import { PREVIEW_CARD_OPACITY, PREVIEW_LANGUAGE_KEY, PREVIEW_OPACITY_KEY, PREVIEW_THEME_KEY, PREVIEW_WALLPAPER_ID, PREVIEW_WALLPAPER_KEY, PreviewContext, type PreviewLoginAction } from './preview';
 import { CUSTOM_WALLPAPER_ID, DEFAULT_CARD_OPACITY, DEFAULT_WALLPAPER_ID, WALLPAPERS, clampCardOpacity, getWallpaperById } from './wallpapers';
 
 // ─── Language context ─────────────────────────────────────────────────────────
@@ -108,6 +110,18 @@ type ProfilePatch = {
 
 const WALLPAPER_CACHE_KEY = 'dash-wallpaper-settings';
 
+const readPreviewWallpaperSettings = (): WallpaperSettings => {
+  try {
+    return normalizeWallpaperSettings({
+      wallpaperId: sessionStorage.getItem(PREVIEW_WALLPAPER_KEY) || PREVIEW_WALLPAPER_ID,
+      cardOpacity: Number(sessionStorage.getItem(PREVIEW_OPACITY_KEY) || PREVIEW_CARD_OPACITY),
+      loading: false,
+    });
+  } catch {
+    return normalizeWallpaperSettings({ wallpaperId: PREVIEW_WALLPAPER_ID, cardOpacity: PREVIEW_CARD_OPACITY, loading: false });
+  }
+};
+
 const getCustomWallpaperUrl = (path: string | null | undefined) => {
   if (!path) return null;
   return supabase.storage.from('wallpapers').getPublicUrl(path).data.publicUrl;
@@ -171,6 +185,8 @@ const ACCOUNT_LABELS = {
     displayName: 'Display name',
     avatarUrl: 'Avatar image',
     uploadAvatar: 'Upload avatar',
+    editAvatar: 'Change avatar',
+    deleteAvatar: 'Remove avatar',
     cropAvatar: 'Crop avatar',
     cropHint: 'Use the sliders to frame the visible square.',
     cropZoom: 'Zoom',
@@ -209,6 +225,8 @@ const ACCOUNT_LABELS = {
     displayName: '用户名',
     avatarUrl: '头像图片',
     uploadAvatar: '上传头像',
+    editAvatar: '修改头像',
+    deleteAvatar: '删除头像',
     cropAvatar: '裁剪头像',
     cropHint: '通过滑块调整头像在方形区域里的位置。',
     cropZoom: '缩放',
@@ -436,7 +454,7 @@ const createCroppedAvatarFile = async (sourceUrl: string, sourceFile: File, crop
   return new File([blob], `${baseName}-cropped.${extension}`, { type: outputType });
 };
 
-function ModeControls() {
+function ModeControls({ showPreviewHome = false }: { showPreviewHome?: boolean }) {
   const { lang, setLang } = useContext(LangContext);
   const { isDark, toggleDark } = useContext(ThemeContext);
 
@@ -460,13 +478,23 @@ function ModeControls() {
       >
         {isDark ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
       </button>
+      {showPreviewHome && (
+        <Link
+          to="/"
+          title={lang === 'zh' ? '返回预览主页' : 'Back to preview'}
+          aria-label={lang === 'zh' ? '返回预览主页' : 'Back to preview'}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-900 dark:text-gray-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:ring-zinc-600"
+        >
+          <ArrowLeft className="h-4.5 w-4.5" />
+        </Link>
+      )}
     </div>
   );
 }
 
 // ─── NavDropdown (narrow screens) ────────────────────────────────────────────
 
-function NavDropdown() {
+function NavDropdown({ surfaceStyle, hasWallpaper, useDarkSurface }: { surfaceStyle?: CSSProperties; hasWallpaper: boolean; useDarkSurface: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { lang } = useContext(LangContext);
@@ -498,15 +526,26 @@ function NavDropdown() {
         <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-36 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg shadow-lg overflow-hidden z-50">
+        <div
+          style={hasWallpaper ? surfaceStyle : undefined}
+          className={`absolute right-0 top-[calc(100%+14px)] z-50 w-36 overflow-hidden rounded-lg border shadow-lg ${
+            hasWallpaper
+              ? 'border-white/35 dark:border-white/10'
+              : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-800'
+          }`}
+        >
           {pages.map(page => (
             <button
               key={page.path}
               onClick={() => { navigate(page.path); setOpen(false); }}
               className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors ${
                 location.pathname === page.path
-                  ? 'bg-gray-100 dark:bg-zinc-700 text-gray-900 dark:text-gray-100'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-700'
+                  ? hasWallpaper
+                    ? (useDarkSurface ? 'bg-white/16 text-white' : 'bg-white/55 text-gray-950')
+                    : 'bg-gray-100 dark:bg-zinc-700 text-gray-900 dark:text-gray-100'
+                  : hasWallpaper
+                    ? (useDarkSurface ? 'text-white/80 hover:bg-white/10 hover:text-white' : 'text-gray-800 hover:bg-white/40')
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-700'
               }`}
             >
               {page.label}
@@ -527,6 +566,8 @@ function NavBar() {
   const { session, profile, updateProfile, uploadProfileAvatar } = useContext(AuthContext);
   const { summary, openUpgradeDialog } = useContext(MembershipContext);
   const { settings: wallpaperSettings } = useContext(WallpaperContext);
+  const { isPreview, requestLogin } = useContext(PreviewContext);
+  const navigate = useNavigate();
   const [accountOpen, setAccountOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
@@ -540,13 +581,13 @@ function NavBar() {
   const isActive = (path: string) => location.pathname === path;
   const labels = NAV_LABELS[lang];
   const accountLabels = ACCOUNT_LABELS[lang];
-  const email = session?.user.email ?? '';
-  const name = profile?.display_name || getFallbackName(session);
-  const avatarUrl = profile?.avatar_url || '';
+  const email = isPreview ? (lang === 'zh' ? '预览状态' : 'Preview mode') : (session?.user.email ?? '');
+  const name = isPreview ? (lang === 'zh' ? '未登录' : 'Not signed in') : (profile?.display_name || getFallbackName(session));
+  const avatarUrl = isPreview ? '' : (profile?.avatar_url || '');
   const isLifetime = summary.plan === 'lifetime';
-  const planBadgeLabel = isLifetime ? 'LIFETIME' : 'FREE';
-  const categoryUsage = isLifetime ? '∞' : `${summary.categoryCount}/${FREE_CATEGORY_LIMIT}`;
-  const linkUsage = isLifetime ? '∞' : `${summary.linkCount}/${FREE_LINK_LIMIT}`;
+  const planBadgeLabel = isPreview ? 'PREVIEW' : (isLifetime ? 'LIFETIME' : 'FREE');
+  const categoryUsage = isPreview ? '5' : (isLifetime ? '∞' : `${summary.categoryCount}/${FREE_CATEGORY_LIMIT}`);
+  const linkUsage = isPreview ? '20' : (isLifetime ? '∞' : `${summary.linkCount}/${FREE_LINK_LIMIT}`);
   const activeWallpaper = getWallpaperById(wallpaperSettings.wallpaperId);
   const activeWallpaperUrl = wallpaperSettings.wallpaperId === CUSTOM_WALLPAPER_ID
     ? wallpaperSettings.customWallpaperUrl
@@ -556,40 +597,48 @@ function NavBar() {
   const surfaceOpacity = clampCardOpacity(wallpaperSettings.cardOpacity);
   const topSurfaceOpacity = Math.min(0.9, surfaceOpacity + 0.15);
   const useDarkNavSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightNav === 'dark'));
-  const useDarkAccountSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightSurface === 'dark'));
+  const useDarkAccountSurface = useDarkNavSurface;
   const navPrimaryClass = useDarkNavSurface ? 'text-white' : 'text-gray-900 dark:text-gray-100';
   const navMutedClass = useDarkNavSurface ? 'text-white/70 hover:text-white' : 'text-[#363636] dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100';
   const navActiveClass = useDarkNavSurface
     ? 'text-white border-b-2 border-white pb-1'
     : 'text-gray-900 dark:text-gray-100 border-b-2 border-gray-900 dark:border-zinc-100 pb-1';
-  const navSurfaceStyle = hasWallpaper
+  const navSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
         backgroundColor: useDarkNavSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
-        backdropFilter: 'blur(14px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+        backdropFilter: accountOpen ? 'none' : 'blur(18px) saturate(1.2)',
+        WebkitBackdropFilter: accountOpen ? 'none' : 'blur(18px) saturate(1.2)',
       }
-    : undefined;
+    : accountOpen
+      ? { backdropFilter: 'none', WebkitBackdropFilter: 'none' }
+      : undefined;
   const accountMenuSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
-        backgroundColor: useDarkAccountSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
-        backdropFilter: 'blur(14px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+        backgroundColor: useDarkNavSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
+        backdropFilter: 'blur(20px) saturate(1.25)',
+        WebkitBackdropFilter: 'blur(20px) saturate(1.25)',
       }
     : undefined;
   const accountMenuTextClass = useDarkAccountSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
-  const accountMenuMutedClass = useDarkAccountSurface ? 'text-white/75' : 'text-gray-700 dark:text-gray-300';
+  const accountMenuMutedClass = useDarkAccountSurface ? 'text-white/85' : 'text-gray-800 dark:text-gray-200';
   const accountMenuItemClass = useDarkAccountSurface
-    ? 'text-white/85 hover:bg-white/10 focus-visible:ring-white/20'
-    : 'text-gray-700 hover:bg-gray-100 focus-visible:ring-gray-300 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600';
-  const accountMenuIconClass = useDarkAccountSurface ? 'text-white/60' : 'text-gray-500 dark:text-zinc-400';
+    ? 'text-white/85 hover:bg-white/16 focus-visible:ring-white/20'
+    : hasWallpaper
+      ? 'text-gray-900 hover:bg-white/55 focus-visible:ring-gray-300'
+      : 'text-gray-900 hover:bg-gray-100 focus-visible:ring-gray-300 dark:text-zinc-100 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600';
+  const accountMenuIconClass = useDarkAccountSurface ? 'text-white/75' : 'text-gray-700 dark:text-zinc-300';
   const accountMenuDividerClass = useDarkAccountSurface ? 'border-white/10' : 'border-gray-100 dark:border-zinc-800';
   const accountSmallButtonClass = useDarkAccountSurface
-    ? 'bg-white/10 text-white/75 hover:bg-white/15 hover:text-white focus-visible:ring-white/20'
-    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-950 focus-visible:ring-gray-300 dark:bg-zinc-800 dark:text-gray-300 dark:hover:bg-zinc-700 dark:hover:text-white dark:focus-visible:ring-zinc-600';
-  const categoryQuotaTitle = isLifetime
+    ? 'bg-white/8 text-white/70 hover:bg-white/12 hover:text-white focus-visible:ring-white/20'
+    : 'bg-gray-100/60 text-gray-600 hover:bg-gray-200/70 hover:text-gray-950 focus-visible:ring-gray-300 dark:bg-zinc-800/60 dark:text-gray-300 dark:hover:bg-zinc-700/70 dark:hover:text-white dark:focus-visible:ring-zinc-600';
+  const categoryQuotaTitle = isPreview
+    ? (lang === 'zh' ? '预览分类：5 个' : 'Preview categories: 5')
+    : isLifetime
     ? (lang === 'zh' ? '分类额度：不限' : 'Category quota: unlimited')
     : (lang === 'zh' ? `分类额度：${summary.categoryCount}/${FREE_CATEGORY_LIMIT}` : `Category quota: ${summary.categoryCount}/${FREE_CATEGORY_LIMIT}`);
-  const linkQuotaTitle = isLifetime
+  const linkQuotaTitle = isPreview
+    ? (lang === 'zh' ? '预览网站：20 个' : 'Preview sites: 20')
+    : isLifetime
     ? (lang === 'zh' ? '网站额度：不限' : 'Site quota: unlimited')
     : (lang === 'zh' ? `网站额度：${summary.linkCount}/${FREE_LINK_LIMIT}` : `Site quota: ${summary.linkCount}/${FREE_LINK_LIMIT}`);
 
@@ -648,17 +697,17 @@ function NavBar() {
     <>
     <nav
       style={navSurfaceStyle}
-      className={`sticky top-0 z-50 border-b shadow-sm transition-colors duration-200 ${
+      className={`sticky top-0 z-50 border-b transition-colors duration-200 ${accountOpen ? 'shadow-none' : 'shadow-sm'} ${
         hasWallpaper
           ? `${useDarkNavSurface ? 'border-white/10' : 'border-white/45 dark:border-white/10'}`
           : 'border-gray-200 bg-white/80 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/85'
       }`}
     >
-      <div className="max-w-[1200px] mx-auto px-6 lg:px-20 py-3 flex justify-between items-center">
+      <div className="mx-auto flex h-[50px] max-w-[1200px] items-center justify-between px-6 lg:px-20">
         <div className={`text-lg font-bold tracking-tight sm:text-xl ${navPrimaryClass}`}>Dash</div>
-        <div className="flex items-center gap-4 md:gap-8">
-          <div className="flex items-baseline gap-4 md:gap-8">
-            <NavDropdown />
+        <div className="flex items-center gap-3">
+        <div className="flex items-baseline gap-5">
+            <NavDropdown surfaceStyle={navSurfaceStyle} hasWallpaper={hasWallpaper} useDarkSurface={useDarkNavSurface} />
             <Link
               to="/"
               className={`hidden md:block font-medium text-sm ${
@@ -686,7 +735,7 @@ function NavBar() {
               onClick={() => setAccountOpen((open) => !open)}
               title={email || accountLabels.account}
               aria-label={accountLabels.account}
-              className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white shadow-sm transition hover:scale-[1.03] hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
+              className={`inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-white shadow-sm transition hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 ${avatarUrl ? 'bg-transparent' : 'bg-gray-900 hover:bg-gray-800 dark:bg-blue-950 dark:hover:bg-blue-900'} dark:text-white dark:focus-visible:ring-blue-700`}
             >
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
@@ -700,11 +749,11 @@ function NavBar() {
                 type="button"
                 aria-label="Close account menu"
                 onClick={() => setAccountOpen(false)}
-                className="fixed bottom-0 left-0 right-0 top-[57px] z-40 bg-black/20 backdrop-blur-sm"
+                className="fixed bottom-0 left-0 right-0 top-[50px] z-40 border-0 bg-transparent"
               />
               <div
                 style={accountMenuSurfaceStyle}
-                className={`absolute right-0 top-full z-50 mt-3 max-h-[calc(100vh-5rem)] w-[330px] max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-lg border p-3.5 shadow-xl ${
+                className={`absolute right-0 top-full z-50 mt-[10px] max-h-[calc(100vh-4.5rem)] w-[330px] max-w-[calc(100vw-1.5rem)] max-[480px]:w-[calc(100vw-4rem)] max-[480px]:max-w-none overflow-y-auto rounded-lg border p-3.5 shadow-xl dash-scrollbar ${
                   hasWallpaper
                     ? 'border-white/35 shadow-[0_20px_60px_rgba(15,23,42,0.18)] dark:border-white/10'
                     : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
@@ -714,13 +763,14 @@ function NavBar() {
                   type="button"
                   onClick={() => {
                     setAccountOpen(false);
-                    setEditProfileOpen(true);
+                    if (isPreview) requestLogin('account');
+                    else setEditProfileOpen(true);
                   }}
-                  className={`mb-3 flex w-full items-center gap-3 rounded-lg p-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 ${useDarkAccountSurface ? 'hover:bg-white/10 focus-visible:ring-white/20' : 'hover:bg-gray-100 focus-visible:ring-gray-300 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600'}`}
+                  className={`mb-3 flex w-full items-center gap-3 rounded-lg p-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 ${accountMenuItemClass}`}
                 >
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950 dark:text-white">
-                    {profile?.avatar_url ? (
-                      <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+                  <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full text-white ${profile?.avatar_url ? 'bg-transparent' : 'bg-gray-900 dark:bg-blue-950'} dark:text-white`}>
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <UserRound className="h-4.5 w-4.5" />
                     )}
@@ -730,7 +780,7 @@ function NavBar() {
                       <p className={`truncate text-base font-semibold leading-5 ${accountMenuTextClass}`}>{name}</p>
                       <span className={`inline-flex h-5 flex-shrink-0 items-center rounded-full px-2.5 text-[10px] font-semibold uppercase tracking-wide ${
                         isLifetime
-                          ? 'border border-amber-300/40 bg-gradient-to-r from-gray-950 via-[#2a2112] to-gray-900 text-amber-200 shadow-sm'
+                          ? 'dash-lifetime-badge border border-gray-950 bg-gray-950 text-white shadow-sm'
                           : 'bg-gray-200 text-gray-600 dark:bg-zinc-700 dark:text-zinc-300'
                       }`}>
                         {planBadgeLabel}
@@ -751,7 +801,7 @@ function NavBar() {
                     <Settings className={`h-4 w-4 flex-shrink-0 ${accountMenuIconClass}`} />
                     <span>{accountLabels.setWallpaper}</span>
                   </button>
-                  <button
+                  {!isPreview && <button
                     type="button"
                     onClick={() => {
                       if (!isLifetime) {
@@ -763,14 +813,18 @@ function NavBar() {
                   >
                     <Gem className={`h-4 w-4 flex-shrink-0 ${accountMenuIconClass}`} />
                     <span>{isLifetime ? accountLabels.alreadyMember : accountLabels.upgrade}</span>
-                  </button>
+                  </button>}
                   <button
                     type="button"
-                    onClick={() => supabase.auth.signOut()}
+                    onClick={() => {
+                      setAccountOpen(false);
+                      if (isPreview) navigate('/login');
+                      else void supabase.auth.signOut();
+                    }}
                     className={`flex h-10 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 ${accountMenuItemClass}`}
                   >
-                    <LogOut className={`h-4 w-4 flex-shrink-0 ${accountMenuIconClass}`} />
-                    <span>{accountLabels.signOut}</span>
+                    {isPreview ? <Lock className={`h-4 w-4 flex-shrink-0 ${accountMenuIconClass}`} /> : <LogOut className={`h-4 w-4 flex-shrink-0 ${accountMenuIconClass}`} />}
+                    <span>{isPreview ? (lang === 'zh' ? '登录或注册' : 'Sign in or register') : accountLabels.signOut}</span>
                   </button>
                 </div>
                 <div className={`mt-2 flex items-center justify-between border-t pt-2 ${accountMenuDividerClass}`}>
@@ -895,11 +949,14 @@ function EditProfileDialog({
     ? (useDarkSurface ? 'bg-white/10' : 'bg-white/45')
     : 'bg-gray-100 dark:bg-zinc-800';
   const subtleTextClass = useDarkSurface ? 'text-white/75' : 'text-gray-700 dark:text-gray-300';
+  const profileFieldClass = hasWallpaper
+    ? `${useDarkSurface ? 'bg-white/10 text-white placeholder:text-white/55 focus:ring-white/30' : 'bg-white/55 text-gray-900 placeholder:text-gray-600 focus:ring-gray-400/70'} border border-white/35 shadow-sm`
+    : 'bg-gray-100 text-gray-900 dark:bg-zinc-800 dark:text-gray-100 focus:ring-gray-300 dark:focus:ring-zinc-600';
   const dialogSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
         backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${dialogOpacity})` : `rgba(255, 255, 255, ${dialogOpacity})`,
-        backdropFilter: 'blur(14px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+        backdropFilter: 'blur(18px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
       }
     : undefined;
 
@@ -979,8 +1036,23 @@ function EditProfileDialog({
     });
   };
 
+  const cancelAvatarCrop = () => {
+    setSelectedAvatarFile(null);
+    setAvatarCrop(DEFAULT_AVATAR_CROP);
+    setAvatarCropSrc((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  };
+
+  const clearDraftAvatar = () => {
+    cancelAvatarCrop();
+    setDraftAvatar('');
+    setAvatarError('');
+  };
+
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-4 py-6 sm:items-center">
+    <div className="dash-scrollbar fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-4 py-6 sm:items-center">
       <button
         type="button"
         aria-label="Close profile dialog"
@@ -989,7 +1061,7 @@ function EditProfileDialog({
       />
       <section
         style={dialogSurfaceStyle}
-        className={`relative max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border p-5 shadow-2xl sm:p-6 ${
+        className={`relative max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border p-5 shadow-2xl dash-scrollbar sm:p-6 ${
           hasWallpaper
             ? 'border-white/35 dark:border-white/10'
             : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
@@ -1022,7 +1094,7 @@ function EditProfileDialog({
             <input
               value={draftName}
               onChange={(event) => setDraftName(event.target.value)}
-              className="mt-1.5 w-full rounded-lg bg-gray-100 px-3 py-2.5 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:bg-zinc-800 dark:text-gray-100 dark:focus:ring-zinc-600"
+              className={`${profileFieldClass} mt-1.5 w-full rounded-lg px-3 py-2.5 text-base outline-none ring-1 ring-transparent transition`}
             />
           </label>
 
@@ -1035,53 +1107,54 @@ function EditProfileDialog({
               className="hidden"
               onChange={handleAvatarFileChange}
             />
-            <button
-              type="button"
-              onClick={() => isLifetime ? avatarInputRef.current?.click() : onUpgrade()}
-              className={`mt-1.5 flex w-full items-center gap-3 rounded-lg p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 ${panelFillClass} ${hasWallpaper ? 'hover:bg-white/55 dark:hover:bg-white/15' : 'hover:bg-gray-200 dark:hover:bg-zinc-700'}`}
-            >
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-gray-600 shadow-sm dark:bg-zinc-900 dark:text-zinc-300">
-                {draftAvatar && isLifetime ? (
-                  <img src={draftAvatar} alt="" className="h-full w-full object-cover" />
-                ) : uploadingAvatar ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : isLifetime ? (
-                  <Upload className="h-4 w-4" />
-                ) : (
-                  <Lock className="h-4 w-4" />
-                )}
+            <div className={`mt-1.5 flex w-full items-center gap-2 rounded-lg p-2 transition ${panelFillClass}`}>
+              <div className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-left">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-gray-600 shadow-sm dark:bg-zinc-900 dark:text-zinc-300">
+                  {draftAvatar && isLifetime ? (
+                    <img src={draftAvatar} alt="" className="h-full w-full object-cover" />
+                  ) : uploadingAvatar ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : isLifetime ? (
+                    <Upload className="h-4 w-4" />
+                  ) : (
+                    <Lock className="h-4 w-4" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {uploadingAvatar ? t.uploadingAvatar : t.uploadAvatar}
+                  </p>
+                  <p className={`mt-0.5 truncate text-xs ${subtleTextClass}`}>
+                    {isLifetime ? 'JPG / PNG / WebP' : t.avatarLocked}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  {uploadingAvatar ? t.uploadingAvatar : t.uploadAvatar}
-                </p>
-                <p className={`mt-0.5 truncate text-xs ${subtleTextClass}`}>
-                  {isLifetime ? 'JPG / PNG / WebP' : t.avatarLocked}
-                </p>
+              <div className="flex flex-shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => isLifetime ? avatarInputRef.current?.click() : onUpgrade()}
+                  aria-label={t.editAvatar}
+                  title={t.editAvatar}
+                  className="flex h-9 w-9 items-center justify-center rounded-[12px] text-gray-600 transition hover:bg-gray-200 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-white dark:focus-visible:ring-zinc-600"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={clearDraftAvatar}
+                  disabled={!isLifetime || !draftAvatar}
+                  aria-label={t.deleteAvatar}
+                  title={t.deleteAvatar}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-200 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-35 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-red-300 dark:focus-visible:ring-zinc-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
-            </button>
+            </div>
             {avatarCropSrc && (
               <div className={`mt-3 rounded-lg p-3 ${panelFillClass}`}>
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t.cropAvatar}</p>
-                    <p className={`mt-0.5 text-xs ${subtleTextClass}`}>{t.cropHint}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedAvatarFile(null);
-                      setAvatarCrop(DEFAULT_AVATAR_CROP);
-                      setAvatarCropSrc((current) => {
-                        if (current) URL.revokeObjectURL(current);
-                        return null;
-                      });
-                    }}
-                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-200 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 dark:focus-visible:ring-zinc-600"
-                    aria-label={t.cancel}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                <div className="mb-3">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t.cropAvatar}</p>
                 </div>
                 <div className="mx-auto aspect-square w-36 overflow-hidden rounded-full bg-gray-200 shadow-inner dark:bg-zinc-700">
                   <img
@@ -1117,15 +1190,25 @@ function EditProfileDialog({
                     </label>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleCroppedAvatarUpload}
-                  disabled={uploadingAvatar}
-                  className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
-                >
-                  {uploadingAvatar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  {uploadingAvatar ? t.uploadingAvatar : t.applyCrop}
-                </button>
+                <div className="mt-4 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={cancelAvatarCrop}
+                    className="flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:bg-zinc-700 dark:focus-visible:ring-zinc-600"
+                  >
+                    <X className="h-4 w-4" />
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCroppedAvatarUpload}
+                    disabled={uploadingAvatar}
+                    className="flex items-center gap-2 rounded-lg bg-gray-900 px-6 py-2 text-sm font-medium text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
+                  >
+                    {uploadingAvatar ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    {uploadingAvatar ? t.uploadingAvatar : t.applyCrop}
+                  </button>
+                </div>
               </div>
             )}
             {avatarError && (
@@ -1179,7 +1262,7 @@ function AuthScreen({ notice }: { notice?: string }) {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const redirectTo = typeof window !== 'undefined' ? window.location.origin : 'https://dash-navigation.vercel.app';
+  const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://dash-navigation.vercel.app/login';
 
   useEffect(() => {
     setMessage(notice ?? '');
@@ -1200,8 +1283,11 @@ function AuthScreen({ notice }: { notice?: string }) {
     setMessage('');
     setError('');
 
+    try {
+    const captchaToken = mode === 'verify-sign-up' ? undefined : await getTurnstileToken(`auth_${mode.replaceAll('-', '_')}`);
+
     if (mode === 'sign-in') {
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password, options: captchaToken ? { captchaToken } : undefined });
       if (authError) setError(authError.message);
     }
 
@@ -1211,6 +1297,7 @@ function AuthScreen({ notice }: { notice?: string }) {
         password,
         options: {
           emailRedirectTo: redirectTo,
+          ...(captchaToken ? { captchaToken } : {}),
         },
       });
 
@@ -1242,6 +1329,7 @@ function AuthScreen({ notice }: { notice?: string }) {
     if (mode === 'forgot-password') {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo,
+        ...(captchaToken ? { captchaToken } : {}),
       });
 
       if (resetError) {
@@ -1251,7 +1339,11 @@ function AuthScreen({ notice }: { notice?: string }) {
       }
     }
 
-    setSubmitting(false);
+    } catch (captchaError) {
+      setError(captchaError instanceof Error ? captchaError.message : String(captchaError));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleResendCode = async () => {
@@ -1260,11 +1352,20 @@ function AuthScreen({ notice }: { notice?: string }) {
     setError('');
     setMessage('');
 
+    let captchaToken: string | undefined;
+    try {
+      captchaToken = await getTurnstileToken('auth_resend_signup');
+    } catch (captchaError) {
+      setError(captchaError instanceof Error ? captchaError.message : String(captchaError));
+      setSubmitting(false);
+      return;
+    }
     const { error: resendError } = await supabase.auth.resend({
       type: 'signup',
       email,
       options: {
         emailRedirectTo: redirectTo,
+        ...(captchaToken ? { captchaToken } : {}),
       },
     });
 
@@ -1418,7 +1519,7 @@ function AuthScreen({ notice }: { notice?: string }) {
               </button>
             )}
           </div>
-          <ModeControls />
+          <ModeControls showPreviewHome />
         </div>
       </section>
     </main>
@@ -1503,7 +1604,7 @@ function PasswordResetScreen({ onDone }: { onDone: (notice: string) => void }) {
 function LoadingScreen() {
   const { lang } = useContext(LangContext);
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 text-gray-600 dark:bg-zinc-950 dark:text-gray-300">
+    <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-300">
       <div className="flex items-center gap-3 text-sm">
         <Loader2 className="h-4 w-4 animate-spin" />
         {AUTH_LABELS[lang].loading}
@@ -1533,8 +1634,8 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
   const dialogSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
         backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${dialogOpacity})` : `rgba(255, 255, 255, ${dialogOpacity})`,
-        backdropFilter: 'blur(14px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+        backdropFilter: 'blur(18px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
       }
     : undefined;
   const primaryTextClass = useDarkSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
@@ -1592,10 +1693,10 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
         </div>
 
         <div className={`rounded-lg p-4 ${panelFillClass}`}>
-          <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+            <div className="flex items-end justify-between gap-x-4 gap-y-2">
             <div className="flex items-center gap-2">
               <p className={`text-3xl font-bold leading-none ${primaryTextClass}`}>{t.upgradePrice}</p>
-              <span className="inline-flex h-5 items-center rounded-full border border-amber-300/40 bg-gradient-to-r from-gray-950 via-[#2a2112] to-gray-900 px-2 text-[10px] font-semibold uppercase tracking-wide text-amber-200 shadow-sm">
+              <span className="inline-flex h-5 items-center rounded-full border border-gray-950 bg-gray-950 px-2 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm">
                 {t.lifetime}
               </span>
             </div>
@@ -1604,10 +1705,10 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
                 href={xianyuUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="dash-xianyu-link inline-flex items-center gap-1.5 self-end bg-clip-text text-sm font-medium text-transparent underline decoration-current underline-offset-2 transition hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600"
+                className="dash-xianyu-link ml-auto inline-flex items-center gap-1.5 text-sm font-medium underline decoration-current underline-offset-2 transition hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600"
               >
                 {t.buyOnXianyu}
-                <ExternalLink className="h-3.5 w-3.5" />
+                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-gray-900 dark:text-white" />
               </a>
             )}
           </div>
@@ -1633,7 +1734,7 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
             </span>
           </label>
           {message && (
-            <p className={`rounded-lg px-3 py-2 text-sm ${
+            <p className={`rounded-lg px-3 py-2 text-sm ${status === 'success' ? 'dash-success-feedback' : ''} ${
               status === 'success'
                 ? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300'
                 : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
@@ -1658,7 +1759,7 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
               <button
                 type="submit"
                 disabled={!code.trim() || status === 'submitting'}
-                className="flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus-visible:ring-zinc-600"
+                className={`flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus-visible:ring-zinc-600 ${status === 'success' ? 'dash-success-button' : ''}`}
               >
                 {status === 'submitting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
                 {status === 'submitting' ? t.redeeming : t.redeemCode}
@@ -1689,15 +1790,74 @@ function InfoPage({ page }: { page: InfoPageKey }) {
   );
 }
 
+function PreviewLoginDialog({ action, onClose }: { action: PreviewLoginAction | null; onClose: () => void }) {
+  const navigate = useNavigate();
+  const { lang } = useContext(LangContext);
+  const { isDark } = useContext(ThemeContext);
+  const { settings } = useContext(WallpaperContext);
+  if (!action) return null;
+
+  const activeWallpaper = getWallpaperById(settings.wallpaperId);
+  const activeWallpaperUrl = settings.wallpaperId === CUSTOM_WALLPAPER_ID ? settings.customWallpaperUrl : activeWallpaper?.src;
+  const hasWallpaper = Boolean(activeWallpaperUrl && settings.wallpaperId !== DEFAULT_WALLPAPER_ID);
+  const useDarkSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightNav === 'dark'));
+  const surfaceOpacity = Math.min(0.9, clampCardOpacity(settings.cardOpacity) + 0.15);
+  const dialogSurfaceStyle: CSSProperties | undefined = hasWallpaper
+    ? {
+        backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${surfaceOpacity})` : `rgba(255, 255, 255, ${surfaceOpacity})`,
+        backdropFilter: 'blur(18px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
+      }
+    : undefined;
+  const titleClass = useDarkSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
+  const bodyClass = useDarkSurface ? 'text-white/85' : 'text-gray-700 dark:text-gray-300';
+
+  const membership = action === 'membership';
+  const copy = lang === 'zh'
+    ? {
+        title: '登录后保存你的导航',
+        body: membership
+          ? '此功能需要先登录，并取得对应会员权限。预览状态不会上传图片或保存会员设置。'
+          : '你正在使用访客预览。示例分类与修改不会保存到账号，登录后即可创建自己的导航。',
+        cancel: '取消', login: '登录或注册', close: '关闭登录提示',
+      }
+    : {
+        title: 'Sign in to save your navigation',
+        body: membership
+          ? 'Sign in and obtain the required membership access to use this feature. Preview mode never uploads member assets.'
+          : 'You are using the guest preview. Example data and edits are not saved; sign in to build your own navigation.',
+        cancel: 'Cancel', login: 'Sign in or register', close: 'Close sign-in prompt',
+      };
+
+  return (
+    <div className="dash-scrollbar fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto p-4 py-6 sm:items-center">
+      <button type="button" aria-label={copy.close} onClick={onClose} className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
+      <section style={dialogSurfaceStyle} role="dialog" aria-modal="true" aria-labelledby="preview-login-title" className={`relative max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border p-5 shadow-2xl dash-scrollbar sm:p-6 ${hasWallpaper ? 'border-white/35 dark:border-white/10' : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'}`}>
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-blue-950"><Lock className="h-4.5 w-4.5" /></div>
+          <div className="min-w-0 flex-1">
+            <h2 id="preview-login-title" className={`text-lg font-semibold ${titleClass}`}>{copy.title}</h2>
+            <p className={`mt-2 text-sm leading-6 ${bodyClass}`}>{copy.body}</p>
+          </div>
+        </div>
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={onClose} className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-colors ${useDarkSurface ? 'text-white/85 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-zinc-700'}`}><X className="h-4 w-4" />{copy.cancel}</button>
+          <button type="button" onClick={() => { onClose(); navigate('/login'); }} className="flex items-center gap-2 rounded-lg bg-gray-900 px-6 py-2 text-sm font-medium text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-blue-950 dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"><Lock className="h-4 w-4" />{copy.login}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [lang, setLangState] = useState<Lang>(() => {
-    try { return (localStorage.getItem('lang') as Lang) || 'en'; } catch { return 'en'; }
+    try { return (sessionStorage.getItem(PREVIEW_LANGUAGE_KEY) as Lang) || (localStorage.getItem('lang') as Lang) || 'zh'; } catch { return 'zh'; }
   });
 
   const [isDark, setIsDark] = useState<boolean>(() => {
-    try { return localStorage.getItem('theme') === 'dark'; } catch { return false; }
+    try { return (sessionStorage.getItem(PREVIEW_THEME_KEY) || localStorage.getItem('theme')) === 'dark'; } catch { return false; }
   });
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -1710,18 +1870,21 @@ export default function App() {
   const [wallpaperSettings, setWallpaperSettings] = useState<WallpaperSettings>(() => readCachedWallpaperSettings());
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const authInitializedRef = useRef(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [authNotice, setAuthNotice] = useState('');
+  const [previewLoginAction, setPreviewLoginAction] = useState<PreviewLoginAction | null>(null);
+  const isPreview = !session;
 
   const setLang = (l: Lang) => {
     setLangState(l);
-    try { localStorage.setItem('lang', l); } catch {}
+    try { (isPreview ? sessionStorage : localStorage).setItem(isPreview ? PREVIEW_LANGUAGE_KEY : 'lang', l); } catch {}
   };
 
   const toggleDark = () => {
     setIsDark(d => {
       const next = !d;
-      try { localStorage.setItem('theme', next ? 'dark' : 'light'); } catch {}
+      try { (isPreview ? sessionStorage : localStorage).setItem(isPreview ? PREVIEW_THEME_KEY : 'theme', next ? 'dark' : 'light'); } catch {}
       return next;
     });
   };
@@ -1824,8 +1987,8 @@ export default function App() {
     return url ? { url } : { error: 'Could not create avatar URL' };
   };
 
-  const refreshMembership = async () => {
-    if (!session) {
+  const refreshMembership = async (targetSession: Session | null = session) => {
+    if (!targetSession) {
       setMembershipSummary({ plan: 'free', categoryCount: 0, linkCount: 0, loading: false });
       return;
     }
@@ -1872,9 +2035,9 @@ export default function App() {
     };
   };
 
-  const refreshWallpaperSettings = async () => {
-    if (!session) {
-      setWallpaperSettings((current) => ({ ...current, loading: false }));
+  const refreshWallpaperSettings = async (targetSession: Session | null = session) => {
+    if (!targetSession) {
+      setWallpaperSettings(readPreviewWallpaperSettings());
       return;
     }
 
@@ -1899,7 +2062,25 @@ export default function App() {
   };
 
   const saveWallpaperSettings = async (input: WallpaperSaveInput) => {
-    if (!session) return { error: 'Not signed in' };
+    if (!session) {
+      const wallpaper = getWallpaperById(input.wallpaperId);
+      if (input.wallpaperId === CUSTOM_WALLPAPER_ID || wallpaper?.access === 'lifetime') {
+        setPreviewLoginAction('membership');
+        return { error: 'Membership required' };
+      }
+      if (input.wallpaperId !== DEFAULT_WALLPAPER_ID && !wallpaper) return { error: 'Invalid wallpaper' };
+      const next = normalizeWallpaperSettings({
+        wallpaperId: input.wallpaperId,
+        cardOpacity: clampCardOpacity(input.cardOpacity),
+        loading: false,
+      });
+      setWallpaperSettings(next);
+      try {
+        sessionStorage.setItem(PREVIEW_WALLPAPER_KEY, next.wallpaperId);
+        sessionStorage.setItem(PREVIEW_OPACITY_KEY, String(next.cardOpacity));
+      } catch {}
+      return {};
+    }
 
     const wallpaper = getWallpaperById(input.wallpaperId);
     if ((input.wallpaperId === CUSTOM_WALLPAPER_ID || isBuiltInLifetimeWallpaper(input.wallpaperId)) && membershipSummary.plan !== 'lifetime') {
@@ -1936,7 +2117,10 @@ export default function App() {
   };
 
   const uploadCustomWallpaper = async (file: File) => {
-    if (!session) return { error: 'Not signed in' };
+    if (!session) {
+      setPreviewLoginAction('membership');
+      return { error: 'Membership required' };
+    }
     if (membershipSummary.plan !== 'lifetime') {
       setUpgradeOpen(true);
       return { error: 'Membership required' };
@@ -1968,21 +2152,50 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!authInitializedRef.current) return;
     void refreshMembership();
   }, [session?.user.id]);
 
   useEffect(() => {
+    if (!authInitializedRef.current) return;
     void refreshWallpaperSettings();
   }, [session?.user.id]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
+    let active = true;
+
+    const initializeAuth = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
       setSession(data.session);
-      if (!passwordRecovery) {
-        void ensureProfile(data.session);
+      if (!data.session) {
+        try {
+          setLangState((sessionStorage.getItem(PREVIEW_LANGUAGE_KEY) as Lang) || 'zh');
+          setIsDark(sessionStorage.getItem(PREVIEW_THEME_KEY) === 'dark');
+        } catch {
+          setLangState('zh');
+          setIsDark(false);
+        }
+        setWallpaperSettings(readPreviewWallpaperSettings());
+        setMembershipSummary({ plan: 'free', categoryCount: 0, linkCount: 0, loading: false });
       }
+      if (!passwordRecovery) {
+        if (data.session) {
+          await Promise.all([
+            ensureProfile(data.session),
+            refreshMembership(data.session),
+            refreshWallpaperSettings(data.session),
+          ]);
+        } else {
+          await ensureProfile(null);
+        }
+      }
+      if (!active) return;
+      authInitializedRef.current = true;
       setAuthLoading(false);
-    });
+    };
+
+    void initializeAuth();
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (event === 'PASSWORD_RECOVERY') {
@@ -1992,21 +2205,52 @@ export default function App() {
         return;
       }
 
+      if (!authInitializedRef.current && event === 'INITIAL_SESSION') return;
+
       if (event === 'SIGNED_OUT') {
         setPasswordRecovery(false);
+        try {
+          sessionStorage.removeItem(PREVIEW_LANGUAGE_KEY);
+          sessionStorage.removeItem(PREVIEW_THEME_KEY);
+          sessionStorage.removeItem(PREVIEW_WALLPAPER_KEY);
+          sessionStorage.removeItem(PREVIEW_OPACITY_KEY);
+        } catch {}
+        setLangState('zh');
+        setIsDark(false);
+        setWallpaperSettings(readPreviewWallpaperSettings());
+        setMembershipSummary({ plan: 'free', categoryCount: 0, linkCount: 0, loading: false });
+        setProfile(null);
+        setSession(null);
+        setAuthLoading(false);
+        return;
       }
 
       setSession(nextSession);
-      void ensureProfile(nextSession);
-      setAuthLoading(false);
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        setAuthLoading(true);
+        window.setTimeout(() => {
+          void Promise.all([
+            ensureProfile(nextSession),
+            refreshMembership(nextSession),
+            refreshWallpaperSettings(nextSession),
+          ]).finally(() => {
+            if (active) setAuthLoading(false);
+          });
+        }, 0);
+      }
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   return (
+    <BrowserRouter>
     <ThemeContext.Provider value={{ isDark, toggleDark }}>
       <LangContext.Provider value={{ lang, setLang }}>
+        <PreviewContext.Provider value={{ isPreview, requestLogin: (action = 'save') => setPreviewLoginAction(action) }}>
         <AuthContext.Provider value={{ session, profile, updateProfile, uploadProfileAvatar }}>
           <MembershipContext.Provider
             value={{
@@ -2031,28 +2275,33 @@ export default function App() {
                   setPasswordRecovery(false);
                   setAuthNotice(notice);
                 }} />
-              ) : !session ? (
-                <AuthScreen notice={authNotice} />
               ) : (
-                <BrowserRouter>
-                  <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-zinc-900 flex flex-col transition-colors duration-200">
-                    <NavBar />
-                    <Routes>
-                      <Route path="/" element={<Home />} />
-                      <Route path="/categories" element={<Categories />} />
-                      <Route path="/privacy" element={<InfoPage page="privacy" />} />
-                      <Route path="/terms" element={<InfoPage page="terms" />} />
-                      <Route path="/docs" element={<InfoPage page="docs" />} />
-                      <Route path="/help" element={<InfoPage page="help" />} />
-                    </Routes>
-                  </div>
-                </BrowserRouter>
+                <Routes>
+                  <Route path="/login" element={session ? <Navigate to="/" replace /> : <AuthScreen notice={authNotice} />} />
+                  <Route path="*" element={(
+                    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-zinc-900 flex flex-col transition-colors duration-200">
+                      <NavBar />
+                      <Routes>
+                        <Route path="/" element={<Home />} />
+                        <Route path="/categories" element={<Categories />} />
+                        <Route path="/privacy" element={<InfoPage page="privacy" />} />
+                        <Route path="/terms" element={<InfoPage page="terms" />} />
+                        <Route path="/docs" element={<InfoPage page="docs" />} />
+                        <Route path="/help" element={<InfoPage page="help" />} />
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                      </Routes>
+                    </div>
+                  )} />
+                </Routes>
               )}
-              <UpgradeDialog open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+              {!isPreview && <UpgradeDialog open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />}
+              <PreviewLoginDialog action={previewLoginAction} onClose={() => setPreviewLoginAction(null)} />
             </WallpaperContext.Provider>
           </MembershipContext.Provider>
         </AuthContext.Provider>
+        </PreviewContext.Provider>
       </LangContext.Provider>
     </ThemeContext.Provider>
+    </BrowserRouter>
   );
 }

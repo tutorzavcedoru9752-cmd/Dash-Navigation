@@ -3,17 +3,79 @@
 
 @import 'tw-animate-css';
 
-@keyframes dash-xianyu-gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 200% 50%;
-  }
+@keyframes dash-xianyu-whole {
+  0%, 100% { color: #111827; opacity: 1; }
+  50% { color: #6b7280; opacity: 0.72; }
+}
+
+@keyframes dash-lifetime-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.dash-lifetime-badge {
+  animation: dash-lifetime-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes dash-success-feedback {
+  0% { opacity: 0; transform: translateY(4px) scale(0.98); }
+  60% { transform: translateY(-1px) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.dash-success-feedback { animation: dash-success-feedback 320ms cubic-bezier(.22, 1, .36, 1); }
+.dash-success-button { animation: dash-success-feedback 420ms cubic-bezier(.22, 1, .36, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-lifetime-badge { animation: none; }
+  .dash-success-feedback, .dash-success-button { animation: none; }
+  .dash-xianyu-link { animation: none; }
 }
 
 .dash-xianyu-link {
-  background-image: linear-gradient(90deg, #111827, #b7791f, #111827);
-  background-size: 200% auto;
-  animation: dash-xianyu-gradient 4s linear infinite;
+  color: #111827;
+  animation: dash-xianyu-whole 4s ease-in-out infinite;
+}
+
+.dash-xianyu-link svg {
+  color: currentColor;
+}
+
+.dark .dash-xianyu-link {
+  color: #f4f4f5;
+}
+
+.dash-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #e5e7eb transparent;
+}
+
+.dash-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.dash-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dash-scrollbar::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 9999px;
+}
+
+.dash-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+}
+
+.dark .dash-scrollbar {
+  scrollbar-color: #52525b transparent;
+}
+
+.dark .dash-scrollbar::-webkit-scrollbar-thumb {
+  background: #52525b;
+}
+
+.dark .dash-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: #71717a;
 }

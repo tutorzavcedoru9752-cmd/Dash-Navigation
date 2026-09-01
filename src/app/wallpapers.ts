@@ -17,6 +17,7 @@ export type WallpaperOption = {
     darkOverlay?: 'default' | 'subtle' | 'none';
     lightWeatherForeground?: 'default' | 'light';
     lightCategoryForeground?: 'default' | 'light';
+    lightHomeCategoryForeground?: 'default' | 'light';
     lightSideNav?: 'default' | 'light' | 'dark';
     lightMutedForeground?: 'default' | 'dark';
     lightSurface?: 'default' | 'dark';
@@ -39,6 +40,8 @@ export const WALLPAPERS: WallpaperOption[] = [
       darkOverlay: 'none',
       lightWeatherForeground: 'light',
       lightSideNav: 'dark',
+      lightCategoryForeground: 'light',
+      lightHomeCategoryForeground: 'default',
       lightMutedForeground: 'dark',
     },
     bannerGradient: {
@@ -53,7 +56,8 @@ export const WALLPAPERS: WallpaperOption[] = [
     access: 'free',
     src: '/wallpapers/free-forest.jpg',
     appearance: {
-      lightCategoryForeground: 'light',
+      lightCategoryForeground: 'default',
+      lightHomeCategoryForeground: 'light',
     },
     bannerGradient: {
       light: 'linear-gradient(90deg, rgba(58, 84, 73, 0.78), rgba(150, 167, 151, 0.82))',
@@ -69,6 +73,7 @@ export const WALLPAPERS: WallpaperOption[] = [
     appearance: {
       lightSideNav: 'dark',
       lightMutedForeground: 'dark',
+      lightHomeCategoryForeground: 'light',
     },
     bannerGradient: {
       light: 'linear-gradient(90deg, rgba(188, 118, 101, 0.74), rgba(74, 100, 129, 0.82))',
@@ -84,8 +89,9 @@ export const WALLPAPERS: WallpaperOption[] = [
     appearance: {
       darkOverlay: 'none',
       lightCategoryForeground: 'light',
+      lightHomeCategoryForeground: 'light',
       lightSideNav: 'light',
-      lightNav: 'dark',
+      lightNav: 'default',
     },
     bannerGradient: {
       light: 'linear-gradient(90deg, rgba(42, 48, 56, 0.84), rgba(126, 132, 138, 0.76))',

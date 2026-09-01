@@ -1,16 +1,18 @@
 import { useState, useEffect, useContext, useRef, type CSSProperties } from 'react';
 import { Link as RouterLink } from 'react-router';
-import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, RefreshCw, Mail, Share2, Download, Check, KeyRound, Clock3, UserRound } from 'lucide-react';
+import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, Eye, EyeOff, Mail, Share2, Download, Check, KeyRound, Clock3, UserRound, RefreshCw } from 'lucide-react';
 import { fetchFaviconData, useCategories, type LinkItem, type NavShare } from '../hooks/useCategories';
 import { motion } from 'motion/react';
 import { AuthContext, FREE_CATEGORY_LIMIT, FREE_LINK_LIMIT, LangContext, MembershipContext, ThemeContext, WallpaperContext } from '../App';
+import { PreviewContext } from '../preview';
 import { CUSTOM_WALLPAPER_ID, DEFAULT_WALLPAPER_ID, clampCardOpacity, getWallpaperById } from '../wallpapers';
+import { sampleWallpaperContrast, toneForWallpaperLuminance, type WallpaperContrastSample } from '../lib/wallpaperContrast';
 
 const ui = {
   en: {
     navigation: 'Navigation',
-    refreshIcons: 'Refresh Icons',
-    refreshing: 'Refreshing...',
+    showIcons: 'Show icons',
+    hideIcons: 'Hide icons',
     createCategory: 'Create Category',
     editCategoryTitle: 'Edit Category',
     deleteCategoryConfirm: (t: string) => `Are you sure you want to delete "${t}"?`,
@@ -62,6 +64,7 @@ const ui = {
     importSelected: 'Import selected',
     noShareFound: 'No valid share code found.',
     toastShareCreated: 'Share code created',
+    toastShareFailed: 'Could not create a share code. Try again.',
     toastShareCopied: 'Share code copied',
     toastShareLoaded: 'Share loaded',
     toastImported: 'Links imported',
@@ -74,8 +77,8 @@ const ui = {
   },
   zh: {
     navigation: '导航',
-    refreshIcons: '刷新图标',
-    refreshing: '刷新中...',
+    showIcons: '显示图标',
+    hideIcons: '关闭图标',
     createCategory: '创建分类',
     editCategoryTitle: '编辑分类',
     deleteCategoryConfirm: (t: string) => `确定要删除分类 "${t}" 吗？`,
@@ -127,6 +130,7 @@ const ui = {
     importSelected: '导入选中网址',
     noShareFound: '没有找到有效的分享码。',
     toastShareCreated: '分享码已生成',
+    toastShareFailed: '分享码生成失败，请重试。',
     toastShareCopied: '分享码已复制',
     toastShareLoaded: '分享内容已读取',
     toastImported: '网址已导入',
@@ -146,17 +150,22 @@ const categoryIconMap: Record<string, React.ReactNode> = {
   'Learning': <GraduationCap className="w-5 h-5" />,
   'AI工具': <BrainCircuit className="w-5 h-5" />,
   'AI Tools': <BrainCircuit className="w-5 h-5" />,
+  'AI 工具': <BrainCircuit className="w-5 h-5" />,
   'AI Assistant': <BrainCircuit className="w-5 h-5" />,
   'Entertainment': <Video className="w-5 h-5" />,
   '娱乐': <Video className="w-5 h-5" />,
   'Tools': <Settings className="w-5 h-5" />,
   'Productivity': <Settings className="w-5 h-5" />,
+  '效率办公': <Rocket className="w-5 h-5" />,
   'Development': <Code className="w-5 h-5" />,
   'Social': <MessageSquare className="w-5 h-5" />,
   'Shopping': <ShoppingCart className="w-5 h-5" />,
   'Travel': <Plane className="w-5 h-5" />,
   'Music': <Music className="w-5 h-5" />,
   'Design': <Palette className="w-5 h-5" />,
+  '设计灵感': <Palette className="w-5 h-5" />,
+  '内容社区': <MessageSquare className="w-5 h-5" />,
+  '常用邮箱': <Mail className="w-5 h-5" />,
   'Gaming': <Gamepad2 className="w-5 h-5" />,
   'Food': <UtensilsCrossed className="w-5 h-5" />,
   'Fitness': <Dumbbell className="w-5 h-5" />,
@@ -216,16 +225,16 @@ const itemIconMap: Record<string, React.ReactNode> = {
 };
 
 const primaryButtonClass = 'rounded-lg bg-gray-900 text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700';
-const selectControlClass = 'w-full appearance-none rounded-lg border-none bg-gray-100 py-3 pl-3 pr-3 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600';
+const selectControlClass = 'w-full appearance-none rounded-lg border-none py-3 pl-3 pr-3 text-base outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600';
 
-function SiteFavicon({ item }: { item: Pick<LinkItem, 'name' | 'icon' | 'faviconUrl'> }) {
+function SiteFavicon({ item, showFavicon = true }: { item: Pick<LinkItem, 'name' | 'icon' | 'faviconUrl'>; showFavicon?: boolean }) {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setFailed(false);
   }, [item.faviconUrl]);
 
-  if (item.faviconUrl && !failed) {
+  if (showFavicon && item.faviconUrl && !failed) {
     return (
       <img
         src={item.faviconUrl}
@@ -266,10 +275,21 @@ function CategorySelect({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { isDark } = useContext(ThemeContext);
+  const { settings: wallpaperSettings } = useContext(WallpaperContext);
   const [open, setOpen] = useState(false);
   const [openUp, setOpenUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = categories.find((category) => category.id === value);
+  const wallpaper = getWallpaperById(wallpaperSettings.wallpaperId);
+  const hasWallpaper = Boolean((wallpaper?.src || wallpaperSettings.customWallpaperUrl) && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
+  const useDarkSurface = hasWallpaper && (isDark || wallpaper?.appearance?.lightSurface === 'dark');
+  const controlSurfaceClass = hasWallpaper
+    ? useDarkSurface ? 'bg-white/10 text-white' : 'bg-white/55 text-gray-900'
+    : 'bg-gray-100 text-gray-900 dark:bg-zinc-700 dark:text-gray-100';
+  const menuSurfaceClass = hasWallpaper
+    ? useDarkSurface ? 'border-white/20 bg-zinc-900/75 backdrop-blur-lg' : 'border-white/40 bg-white/60 backdrop-blur-lg'
+    : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-800';
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -290,13 +310,13 @@ function CategorySelect({
           }
           setOpen((next) => !next);
         }}
-        className={`${selectControlClass} flex items-center justify-between text-left`}
+        className={`${selectControlClass} ${controlSurfaceClass} flex items-center justify-between text-left`}
       >
         <span className="truncate">{selected?.title ?? categories[0]?.title ?? ''}</span>
         <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-500 transition-transform dark:text-gray-300 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className={`absolute left-0 right-0 z-[90] max-h-[92px] overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800 ${
+          <div className={`absolute left-0 right-0 z-[110] max-h-[92px] overflow-y-auto rounded-lg border py-1 shadow-lg dash-scrollbar ${menuSurfaceClass} ${
           openUp ? 'bottom-full mb-2' : 'top-full mt-2'
         }`}>
           {categories.map((category) => {
@@ -344,9 +364,9 @@ export default function Categories() {
     getShare,
     deleteShare,
     importSharedLinks,
-    migrateFavicons,
   } = useCategories();
   const { summary, refreshMembership, openUpgradeDialog } = useContext(MembershipContext);
+  const { isPreview, requestLogin } = useContext(PreviewContext);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [editingItem, setEditingItem] = useState<{ id: string; name: string; url: string; description: string; categoryId: string } | null>(null);
@@ -355,7 +375,9 @@ export default function Categories() {
   const [editingCategory, setEditingCategory] = useState<{ id: string; title: string; description: string } | null>(null);
   const [formData, setFormData] = useState({ name: '', url: '', description: '', categoryId: '' });
   const [categoryFormData, setCategoryFormData] = useState({ id: '', title: '', description: '' });
-  const [isRefreshingFavicons, setIsRefreshingFavicons] = useState(false);
+  const [showFavicons, setShowFavicons] = useState(() => {
+    try { return sessionStorage.getItem('dash-category-favicons') !== 'hidden'; } catch { return true; }
+  });
   const [toast, setToast] = useState<{ status: 'saving' | 'done' | 'error'; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
@@ -370,6 +392,7 @@ export default function Categories() {
   const [importTargetMode, setImportTargetMode] = useState<'existing' | 'new'>('existing');
   const [importCategoryId, setImportCategoryId] = useState('');
   const [importNewCategory, setImportNewCategory] = useState({ id: '', title: '', description: '' });
+  const [wallpaperContrast, setWallpaperContrast] = useState<WallpaperContrastSample | null>(null);
   const selectedCategory = categories.find(c => c.id === selectedCategoryId);
   const hasReachedCategoryLimit = summary.plan === 'free' && summary.categoryCount >= FREE_CATEGORY_LIMIT;
   const hasReachedLinkLimit = summary.plan === 'free' && summary.linkCount >= FREE_LINK_LIMIT;
@@ -387,38 +410,56 @@ export default function Categories() {
   const glassSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
         backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${cardOpacity})` : `rgba(255, 255, 255, ${cardOpacity})`,
-        backdropFilter: 'blur(14px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+        backdropFilter: 'blur(20px) saturate(1.25)',
+        WebkitBackdropFilter: 'blur(20px) saturate(1.25)',
       }
     : undefined;
   const topGlassSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
         backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
-        backdropFilter: 'blur(14px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+        backdropFilter: 'blur(18px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
       }
     : undefined;
   const reducedFillSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
-        backgroundColor: useDarkGlassSurface ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.30)',
-        backdropFilter: 'blur(8px) saturate(1.12)',
-        WebkitBackdropFilter: 'blur(8px) saturate(1.12)',
+        backgroundColor: useDarkGlassSurface
+          ? `rgba(24, 24, 27, ${Math.max(0.05, cardOpacity - 0.1)})`
+          : `rgba(255, 255, 255, ${Math.max(0.05, cardOpacity - 0.1)})`,
+        backdropFilter: 'blur(10px) saturate(1.15)',
+        WebkitBackdropFilter: 'blur(10px) saturate(1.15)',
       }
     : undefined;
-  const categoryTextClass = hasWallpaper && (useDarkGlassSurface || builtInWallpaper?.appearance?.lightCategoryForeground === 'light')
+  const categoryHeaderTone = toneForWallpaperLuminance(
+    wallpaperContrast?.categoryHeaderLuminance,
+    isDark,
+    showDarkWallpaperOverlay,
+    isDark ? 'light' : 'dark',
+  );
+  const footerTone = toneForWallpaperLuminance(
+    wallpaperContrast?.footerLuminance,
+    isDark,
+    showDarkWallpaperOverlay,
+    isDark ? 'light' : 'dark',
+  );
+  const categoryTextClass = categoryHeaderTone === 'light'
     ? 'text-white drop-shadow-sm'
-    : 'text-gray-900 dark:text-gray-100';
-  const mutedTextClass = hasWallpaper && useDarkGlassSurface
-    ? 'text-white/70'
-    : useDarkerMutedForeground ? 'text-gray-800' : 'text-gray-600 dark:text-gray-400';
+    : 'text-gray-950 drop-shadow-sm';
+  const mutedTextClass = categoryHeaderTone === 'light'
+    ? 'text-white/80 drop-shadow-sm'
+    : 'text-gray-800 drop-shadow-sm';
   const faintTextClass = hasWallpaper && useDarkGlassSurface
-    ? 'text-white/55'
-    : useDarkerMutedForeground ? 'text-gray-700' : 'text-gray-500 dark:text-gray-400';
+    ? 'text-white/68'
+    : useDarkerMutedForeground ? 'text-gray-800' : 'text-gray-600 dark:text-gray-400';
   const cardPrimaryTextClass = hasWallpaper && useDarkGlassSurface
     ? 'text-white'
     : 'text-gray-900 dark:text-gray-100';
   const cardSecondaryTextClass = hasWallpaper && useDarkGlassSurface
     ? 'text-white/72'
+    : 'text-gray-700 dark:text-gray-400';
+  const navigationTextClass = useDarkGlassSurface ? 'text-white/85 drop-shadow-sm' : 'text-black dark:text-gray-100';
+  const footerTextClass = hasWallpaper
+    ? (footerTone === 'light' ? 'text-white drop-shadow-sm' : 'text-gray-950 drop-shadow-sm')
     : 'text-gray-600 dark:text-gray-400';
   const glassBorderClass = hasWallpaper
     ? 'border-white/45 shadow-[0_8px_24px_rgba(15,23,42,0.10)] dark:border-white/10 dark:shadow-[0_6px_18px_rgba(0,0,0,0.18)]'
@@ -429,6 +470,33 @@ export default function Categories() {
   const modalSurfaceClass = hasWallpaper
     ? 'border-white/35 dark:border-white/10'
     : 'bg-white dark:bg-zinc-800';
+  const formFieldClass = hasWallpaper
+    ? `${useDarkGlassSurface ? 'bg-white/10 text-white placeholder:text-white/55 focus:ring-white/30' : 'bg-white/55 text-gray-900 placeholder:text-gray-600 focus:ring-gray-400/70'} border border-white/35 shadow-sm`
+    : 'bg-gray-100 dark:bg-zinc-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-gray-300 dark:focus:ring-zinc-600';
+  const modalItemClass = hasWallpaper
+    ? `${useDarkGlassSurface ? 'border-white/20 bg-white/8 hover:bg-white/14' : 'border-white/40 bg-white/35 hover:bg-white/55'}`
+    : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500';
+  const modalLabelClass = hasWallpaper
+    ? useDarkGlassSurface ? 'text-white/80' : 'text-gray-700'
+    : 'text-gray-700 dark:text-gray-300';
+
+  useEffect(() => {
+    if (!hasWallpaper || !wallpaperUrl) {
+      setWallpaperContrast(null);
+      return;
+    }
+    let cancelled = false;
+    sampleWallpaperContrast(wallpaperUrl, isDark)
+      .then((sample) => {
+        if (!cancelled) setWallpaperContrast(sample);
+      })
+      .catch(() => {
+        if (!cancelled) setWallpaperContrast(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasWallpaper, isDark, wallpaperUrl]);
 
   const hostnameFor = (url: string) => {
     try {
@@ -509,6 +577,7 @@ export default function Categories() {
   }, []);
 
   const handleAddItem = async () => {
+    if (isPreview) { requestLogin('save'); return; }
     const targetCategoryId = formData.categoryId || selectedCategoryId;
     const targetCategory = categories.find((category) => category.id === targetCategoryId);
     if (!formData.name || !formData.url || !targetCategory) return;
@@ -542,6 +611,7 @@ export default function Categories() {
   };
 
   const handleEditItem = async () => {
+    if (isPreview) { requestLogin('save'); return; }
     if (!editingItem || !formData.name || !formData.url) return;
     const targetCategoryId = formData.categoryId || editingItem.categoryId;
     startToast(t.toastSaving);
@@ -560,6 +630,7 @@ export default function Categories() {
   };
 
   const handleDeleteItem = async (itemId: string) => {
+    if (isPreview) { requestLogin('save'); return; }
     startToast(t.toastSaving);
       await deleteItem(selectedCategoryId, itemId);
       await refreshMembership();
@@ -567,6 +638,7 @@ export default function Categories() {
   };
 
   const handleDeleteCategory = async () => {
+    if (isPreview) { requestLogin('save'); return; }
     if (confirm(t.deleteCategoryConfirm(selectedCategory?.title ?? ''))) {
       startToast(t.toastSaving);
       await deleteCategory(selectedCategoryId);
@@ -580,12 +652,14 @@ export default function Categories() {
   };
 
   const startEdit = (item: LinkItem) => {
+    if (isPreview) { requestLogin('save'); return; }
     setEditingItem({ ...item, categoryId: selectedCategoryId });
     setFormData({ name: item.name, url: item.url, description: item.description, categoryId: selectedCategoryId });
     setIsAddingNew(false);
   };
 
   const startAddNew = () => {
+    if (isPreview) { requestLogin('save'); return; }
     if (hasReachedLinkLimit) {
       openUpgradeDialog();
       return;
@@ -602,6 +676,7 @@ export default function Categories() {
   };
 
   const handleCreateCategory = async () => {
+    if (isPreview) { requestLogin('save'); return; }
     if (!categoryFormData.id || !categoryFormData.title) return;
     startToast(t.toastSaving);
     const result = await createCategory({
@@ -629,6 +704,7 @@ export default function Categories() {
   };
 
   const startEditCategory = (category: any) => {
+    if (isPreview) { requestLogin('save'); return; }
     setEditingCategory({
       id: category.id,
       title: category.title,
@@ -642,6 +718,7 @@ export default function Categories() {
   };
 
   const handleUpdateCategory = async () => {
+    if (isPreview) { requestLogin('save'); return; }
     if (!editingCategory || !categoryFormData.title) return;
     startToast(t.toastSaving);
     const currentCategory = categories.find(c => c.id === editingCategory.id);
@@ -666,11 +743,12 @@ export default function Categories() {
     setCategoryFormData({ id: '', title: '', description: '' });
   };
 
-  const handleRefreshFavicons = async () => {
-    setIsRefreshingFavicons(true);
-    await migrateFavicons();
-    setIsRefreshingFavicons(false);
-    finishToast(t.toastRefreshed);
+  const handleToggleFavicons = () => {
+    setShowFavicons((current) => {
+      const next = !current;
+      try { sessionStorage.setItem('dash-category-favicons', next ? 'visible' : 'hidden'); } catch {}
+      return next;
+    });
   };
 
   const openShareModal = () => {
@@ -691,7 +769,7 @@ export default function Categories() {
       setShareResult(result);
       finishToast(t.toastShareCreated);
     } else {
-      finishToast(t.selectAtLeastOne, 'error');
+      finishToast(t.toastShareFailed, 'error');
     }
   };
 
@@ -765,6 +843,7 @@ export default function Categories() {
   };
 
   const handleImportSharedLinks = async () => {
+    if (isPreview) { requestLogin('import'); return; }
     if (!loadedShare || importSelectedIds.size === 0) return;
 
     let targetCategoryId = importCategoryId;
@@ -826,6 +905,7 @@ export default function Categories() {
   };
 
   const handleDeleteCategoryFromList = async (categoryId: string) => {
+    if (isPreview) { requestLogin('save'); return; }
     const category = categories.find(c => c.id === categoryId);
     if (confirm(t.deleteCategoryConfirm(category?.title ?? ''))) {
       startToast(t.toastSaving);
@@ -839,6 +919,7 @@ export default function Categories() {
   };
 
   const withReorderFeedback = async (fn: () => Promise<void>) => {
+    if (isPreview) { requestLogin('save'); return; }
     startToast(t.toastSaving);
     await fn();
     finishToast(t.toastReordered);
@@ -908,9 +989,9 @@ export default function Categories() {
             className={`flex max-h-[48vh] flex-col overflow-hidden rounded-xl border p-4 transition-colors duration-200 md:max-h-none md:p-5 ${glassBorderClass}`}
           >
             <div className="mb-3 flex flex-shrink-0 items-center px-0 md:px-2">
-              <h2 className={`text-lg font-semibold ${categoryTextClass}`}>{t.navigation}</h2>
+              <h2 className={`text-lg font-semibold ${navigationTextClass}`}>{t.navigation}</h2>
             </div>
-            <ul className="space-y-1 overflow-y-auto flex-1 min-h-0 pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-300 scrollbar-thin">
+            <ul className="dash-scrollbar flex-1 min-h-0 space-y-1 overflow-y-auto pr-1">
               {categories.map((category, index) => (
                 <li key={category.id} className="group relative">
                   <button
@@ -955,6 +1036,10 @@ export default function Categories() {
             <div className="grid grid-cols-3 gap-2 md:grid-cols-1">
               <button
                 onClick={() => {
+                  if (isPreview) {
+                    requestLogin('save');
+                    return;
+                  }
                   if (hasReachedCategoryLimit) {
                     openUpgradeDialog();
                     return;
@@ -969,15 +1054,15 @@ export default function Categories() {
                 <span className="truncate">{t.createCategory}</span>
               </button>
               <button
-                onClick={handleRefreshFavicons}
-                disabled={isRefreshingFavicons}
-                className={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 md:w-full md:gap-2 md:px-4 md:text-sm ${
+                onClick={handleToggleFavicons}
+                aria-pressed={showFavicons}
+                className={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-all active:scale-[0.98] md:w-full md:gap-2 md:px-4 md:text-sm ${
                   hasWallpaper ? `${useDarkGlassSurface ? 'bg-white/10 text-white/75 hover:bg-white/15 hover:text-white' : 'bg-white/45 text-gray-800 hover:bg-white/60'}` : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600'
                 }`}
-                title="Refresh all website icons"
+                title={showFavicons ? t.hideIcons : t.showIcons}
               >
-                <RefreshCw className={`h-4 w-4 flex-shrink-0 ${isRefreshingFavicons ? 'animate-spin' : ''}`} />
-                <span className="truncate">{isRefreshingFavicons ? t.refreshing : t.refreshIcons}</span>
+                {showFavicons ? <EyeOff className="h-4 w-4 flex-shrink-0" /> : <Eye className="h-4 w-4 flex-shrink-0" />}
+                <span className="truncate">{showFavicons ? t.hideIcons : t.showIcons}</span>
               </button>
               <button
                 onClick={openImportModal}
@@ -1058,7 +1143,7 @@ export default function Categories() {
                         ? 'border-white/55 bg-white/70 shadow-sm dark:border-white/10 dark:bg-white/10'
                         : 'bg-white dark:bg-zinc-700 border-gray-200 dark:border-zinc-600'
                     }`}>
-                      <SiteFavicon item={item} />
+                      <SiteFavicon item={item} showFavicon={showFavicons} />
                     </div>
                     <div className={`flex gap-0.5 transition-opacity ${activeCardId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                       <button
@@ -1129,7 +1214,7 @@ export default function Categories() {
                 <Plus className="w-5 h-5 md:w-6 md:h-6" />
               </div>
               <span className="font-semibold text-sm md:text-base">{t.addNewSite}</span>
-              <span className={`mt-0.5 hidden text-xs md:mt-1 md:text-sm sm:block ${faintTextClass}`}>{t.configureHint}</span>
+              <span className={`mt-0.5 hidden text-xs md:mt-1 md:text-sm sm:block ${cardSecondaryTextClass}`}>{t.configureHint}</span>
             </button>
           </div>
 
@@ -1160,7 +1245,7 @@ export default function Categories() {
           transition={{ type: "spring", duration: 0.3 }}
           onClick={(e) => e.stopPropagation()}
           style={topGlassSurfaceStyle}
-          className={`relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
+          className={`dash-scrollbar relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
         >
           <div className="flex items-center gap-2 mb-6">
             <Plus className="w-5 h-5 text-gray-900 dark:text-gray-100" />
@@ -1169,9 +1254,9 @@ export default function Categories() {
           <form onSubmit={(e) => { e.preventDefault(); handleCreateCategory(); }} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.categoryId}</label>
+                <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.categoryId}</label>
                 <input
-                  className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
+                  className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
                   type="text"
                   value={categoryFormData.id}
                   onChange={(e) => setCategoryFormData({ ...categoryFormData, id: e.target.value })}
@@ -1179,9 +1264,9 @@ export default function Categories() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.categoryTitle}</label>
+                <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.categoryTitle}</label>
                 <input
-                  className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
+                  className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
                   type="text"
                   value={categoryFormData.title}
                   onChange={(e) => setCategoryFormData({ ...categoryFormData, title: e.target.value })}
@@ -1190,9 +1275,9 @@ export default function Categories() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.description}</label>
+              <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.description}</label>
               <textarea
-                className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
+                className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
                 rows={2}
                 value={categoryFormData.description}
                 onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
@@ -1238,7 +1323,7 @@ export default function Categories() {
           transition={{ type: "spring", duration: 0.3 }}
           onClick={(e) => e.stopPropagation()}
           style={topGlassSurfaceStyle}
-          className={`relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
+          className={`dash-scrollbar relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
         >
           <div className="flex items-center gap-2 mb-6">
             <Settings className="w-5 h-5 text-gray-900 dark:text-gray-100" />
@@ -1247,18 +1332,18 @@ export default function Categories() {
           <form onSubmit={(e) => { e.preventDefault(); handleUpdateCategory(); }} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.categoryId}</label>
+                <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.categoryId}</label>
                 <input
-                  className="w-full bg-gray-200 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-500 dark:text-gray-500 cursor-not-allowed"
+                  className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none cursor-not-allowed opacity-70`}
                   type="text"
                   value={categoryFormData.id}
                   disabled
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.categoryTitle}</label>
+                <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.categoryTitle}</label>
                 <input
-                  className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
+                  className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
                   type="text"
                   value={categoryFormData.title}
                   onChange={(e) => setCategoryFormData({ ...categoryFormData, title: e.target.value })}
@@ -1268,9 +1353,9 @@ export default function Categories() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.description}</label>
+              <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.description}</label>
               <textarea
-                className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
+                className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
                 rows={2}
                 value={categoryFormData.description}
                 onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
@@ -1316,7 +1401,7 @@ export default function Categories() {
           transition={{ type: "spring", duration: 0.3 }}
           onClick={(e) => e.stopPropagation()}
           style={topGlassSurfaceStyle}
-          className={`relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
+          className={`dash-scrollbar relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
         >
           <div className="flex items-center gap-2 mb-6">
             {editingItem ? <Edit2 className="w-5 h-5 text-gray-900 dark:text-gray-100" /> : <Plus className="w-5 h-5 text-gray-900 dark:text-gray-100" />}
@@ -1329,9 +1414,9 @@ export default function Categories() {
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.siteTitle}</label>
+                <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.siteTitle}</label>
                 <input
-                  className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
+                  className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -1340,9 +1425,9 @@ export default function Categories() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.destinationUrl}</label>
+                <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.destinationUrl}</label>
                 <input
-                  className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
+                  className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
                   type="url"
                   value={formData.url}
                   onChange={(e) => setFormData({ ...formData, url: e.target.value })}
@@ -1351,7 +1436,7 @@ export default function Categories() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.category}</label>
+                <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.category}</label>
               <CategorySelect
                 categories={categories}
                 value={formData.categoryId || selectedCategoryId}
@@ -1359,9 +1444,9 @@ export default function Categories() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-1 tracking-wide">{t.description}</label>
+              <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.description}</label>
               <textarea
-                className="w-full bg-gray-100 dark:bg-zinc-700 border-none rounded-lg p-3 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600 transition-all"
+                className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
                 rows={2}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -1407,7 +1492,7 @@ export default function Categories() {
           transition={{ type: "spring", duration: 0.3 }}
           onClick={(e) => e.stopPropagation()}
           style={topGlassSurfaceStyle}
-          className={`relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
+          className={`dash-scrollbar relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
         >
           <div className="mb-6 flex items-center gap-2">
             <Share2 className="w-5 h-5 text-gray-900 dark:text-gray-100" />
@@ -1425,12 +1510,12 @@ export default function Categories() {
                     onClick={() => setShareSelectedIds((current) => toggleSetValue(current, item.id))}
                     className={`flex min-h-[88px] items-center gap-3 rounded-lg border py-3 pl-3 pr-3.5 text-left transition ${
                       selected
-                        ? 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
-                        : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500'
+                        ? hasWallpaper ? (useDarkGlassSurface ? 'border-white/30 bg-white/12 shadow-sm' : 'border-white/65 bg-white/45 shadow-sm') : 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
+                        : modalItemClass
                     }`}
                   >
                     <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
-                      <SiteFavicon item={item} />
+                      <SiteFavicon item={item} showFavicon={showFavicons} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
@@ -1448,15 +1533,15 @@ export default function Categories() {
           )}
 
           {shareResult && (
-            <div className="mt-5 rounded-lg bg-gray-100 p-4 dark:bg-zinc-700">
+            <div className={`mt-5 rounded-lg p-4 ${hasWallpaper ? (useDarkGlassSurface ? 'bg-white/10' : 'bg-white/35') : 'bg-gray-100 dark:bg-zinc-700'}`}>
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.shareCode}</p>
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${modalLabelClass}`}>{t.shareCode}</p>
                   <p className="mt-1 font-mono text-2xl font-semibold tracking-widest text-gray-900 dark:text-gray-100">{shareResult.code}</p>
                 </div>
                 <ShareAuthor name={shareResult.sharerName} avatarUrl={profile?.avatar_url || shareResult.sharerAvatarUrl} />
               </div>
-              <p className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <p className={`flex items-center gap-2 text-xs ${modalLabelClass}`}>
                 <Clock3 className="h-3.5 w-3.5" />
                 {t.shareExpires}: {new Date(shareResult.expiresAt).toLocaleString()}
               </p>
@@ -1503,7 +1588,7 @@ export default function Categories() {
           transition={{ type: "spring", duration: 0.3 }}
           onClick={(e) => e.stopPropagation()}
           style={topGlassSurfaceStyle}
-          className={`relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
+          className={`dash-scrollbar relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
         >
           <div className="mb-6 flex items-center gap-3">
             <div className="flex items-center gap-3">
@@ -1520,14 +1605,14 @@ export default function Categories() {
                 value={importCode}
                 onChange={(e) => setImportCode(e.target.value.toUpperCase())}
                 placeholder={t.shareCodePlaceholder}
-                className="min-w-0 flex-1 rounded-lg bg-gray-100 px-3 py-2.5 text-base text-gray-900 outline-none ring-1 ring-transparent transition focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                className={`${formFieldClass} min-w-0 flex-1 rounded-lg px-3 py-2.5 text-base outline-none ring-1 ring-transparent transition`}
               />
             </div>
           )}
 
           {loadedShare && (
             <div className="mt-5 space-y-5">
-              <div className="flex items-start justify-between gap-4 rounded-lg bg-gray-100 p-4 dark:bg-zinc-700">
+              <div className={`flex items-start justify-between gap-4 rounded-lg p-4 ${hasWallpaper ? (useDarkGlassSurface ? 'bg-white/10' : 'bg-white/35') : 'bg-gray-100 dark:bg-zinc-700'}`}>
                 <div className="min-w-0">
                   <p className="font-semibold text-gray-900 dark:text-gray-100">{loadedShare.categoryTitle}</p>
                   {loadedShare.categoryDescription && (
@@ -1547,12 +1632,12 @@ export default function Categories() {
                       onClick={() => setImportSelectedIds((current) => toggleSetValue(current, item.id))}
                       className={`flex min-h-[88px] items-center gap-3 rounded-lg border py-3 pl-3 pr-3.5 text-left transition ${
                         selected
-                          ? 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
-                          : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500'
+                          ? hasWallpaper ? (useDarkGlassSurface ? 'border-white/30 bg-white/12 shadow-sm' : 'border-white/65 bg-white/45 shadow-sm') : 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
+                        : modalItemClass
                       }`}
                     >
                       <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
-                        <SiteFavicon item={item} />
+                        <SiteFavicon item={item} showFavicon={showFavicons} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
@@ -1569,7 +1654,7 @@ export default function Categories() {
               </div>
 
               <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.importTo}</p>
+                <p className={`text-xs font-semibold uppercase tracking-wide ${modalLabelClass}`}>{t.importTo}</p>
                 <div className="flex items-center gap-5 border-b border-gray-200 dark:border-zinc-700">
                   <button
                     type="button"
@@ -1577,7 +1662,7 @@ export default function Categories() {
                     className={`pb-2 text-sm font-medium transition-colors ${
                       importTargetMode === 'existing'
                         ? 'border-b-2 border-gray-900 text-gray-900 dark:border-zinc-100 dark:text-gray-100'
-                        : 'border-b-2 border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+                        : 'border-b-2 border-transparent text-gray-700 hover:text-gray-950 dark:text-gray-300 dark:hover:text-gray-100'
                     }`}
                   >
                     {t.existingCategory}
@@ -1588,7 +1673,7 @@ export default function Categories() {
                     className={`pb-2 text-sm font-medium transition-colors ${
                       importTargetMode === 'new'
                         ? 'border-b-2 border-gray-900 text-gray-900 dark:border-zinc-100 dark:text-gray-100'
-                        : 'border-b-2 border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+                        : 'border-b-2 border-transparent text-gray-700 hover:text-gray-950 dark:text-gray-300 dark:hover:text-gray-100'
                     }`}
                   >
                     {t.newCategory}
@@ -1608,31 +1693,31 @@ export default function Categories() {
                 {importTargetMode === 'new' && (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <label className="block">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.categoryId}</span>
+                      <span className={`text-xs font-semibold uppercase tracking-wide ${modalLabelClass}`}>{t.categoryId}</span>
                       <input
                         value={importNewCategory.id}
                         onChange={(e) => setImportNewCategory({ ...importNewCategory, id: e.target.value })}
                         placeholder={t.categoryIdPlaceholder}
-                        className="mt-1.5 w-full rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                        className={`${formFieldClass} mt-1.5 w-full rounded-lg p-3 text-base outline-none transition`}
                       />
                     </label>
                     <label className="block">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.categoryTitle}</span>
+                      <span className={`text-xs font-semibold uppercase tracking-wide ${modalLabelClass}`}>{t.categoryTitle}</span>
                       <input
                         value={importNewCategory.title}
                         onChange={(e) => setImportNewCategory({ ...importNewCategory, title: e.target.value })}
                         placeholder={t.categoryTitlePlaceholder}
-                        className="mt-1.5 w-full rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                        className={`${formFieldClass} mt-1.5 w-full rounded-lg p-3 text-base outline-none transition`}
                       />
                     </label>
                     <label className="block md:col-span-2">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.description}</span>
+                      <span className={`text-xs font-semibold uppercase tracking-wide ${modalLabelClass}`}>{t.description}</span>
                       <textarea
                         value={importNewCategory.description}
                         onChange={(e) => setImportNewCategory({ ...importNewCategory, description: e.target.value })}
                         placeholder={t.descriptionPlaceholder}
                         rows={2}
-                        className="mt-1.5 w-full rounded-lg bg-gray-100 p-3 text-base text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 dark:bg-zinc-700 dark:text-gray-100 dark:focus:ring-zinc-600"
+                        className={`${formFieldClass} mt-1.5 w-full rounded-lg p-3 text-base outline-none transition`}
                       />
                     </label>
                   </div>
@@ -1694,11 +1779,11 @@ export default function Categories() {
         : 'border-gray-200 bg-gray-100 dark:border-zinc-800 dark:bg-zinc-900'
     }`}>
       <div className="max-w-[1200px] mx-auto px-8 py-12 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-        <p className={`text-xs uppercase tracking-widest ${hasWallpaper ? categoryTextClass : 'text-gray-600 dark:text-gray-400'}`}>© 2024 Minimalist Dash. Designed for focus.</p>
+        <p className={`text-xs uppercase tracking-widest ${footerTextClass}`}>© 2024 Minimalist Dash. Designed for focus.</p>
         <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-          <RouterLink to="/docs" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>Documentation</RouterLink>
-          <a href="https://github.com/tutorzavcedoru9752-cmd/Dash-Navigation" target="_blank" rel="noreferrer" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>GitHub</a>
-          <RouterLink to="/privacy" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>Privacy Policy</RouterLink>
+          <RouterLink to="/docs" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${footerTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>Documentation</RouterLink>
+          <a href="https://github.com/tutorzavcedoru9752-cmd/Dash-Navigation" target="_blank" rel="noreferrer" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${footerTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>GitHub</a>
+          <RouterLink to="/privacy" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${footerTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>Privacy Policy</RouterLink>
         </div>
       </div>
     </footer>

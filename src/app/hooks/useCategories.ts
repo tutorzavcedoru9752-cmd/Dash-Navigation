@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useContext } from 'react';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
-import { supabase } from '../lib/supabase';
+import { getPreviewSupabase, supabase } from '../lib/supabase';
+import { getTurnstileToken } from '../lib/turnstile';
+import { PREVIEW_CATEGORIES, PreviewContext } from '../preview';
 
 export interface LinkItem {
   id: string;
@@ -118,6 +120,37 @@ const createShareCode = () => {
 };
 
 const normalizeShareCode = (code: string) => code.trim().toUpperCase().replace(/\s+/g, '');
+const LOCAL_PREVIEW_SHARES_KEY = 'dash-preview-local-shares';
+
+const readLocalPreviewShares = (): Record<string, NavShare> => {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(LOCAL_PREVIEW_SHARES_KEY) || '{}') as Record<string, NavShare>;
+    return Object.fromEntries(Object.entries(parsed).filter(([, share]) => new Date(share.expiresAt).getTime() > Date.now()));
+  } catch {
+    return {};
+  }
+};
+
+const writeLocalPreviewShares = (shares: Record<string, NavShare>) => {
+  try { sessionStorage.setItem(LOCAL_PREVIEW_SHARES_KEY, JSON.stringify(shares)); } catch {}
+};
+
+const createLocalPreviewShare = (category: Category, links: LinkItem[]) => {
+  const shares = readLocalPreviewShares();
+  let code = createShareCode();
+  while (shares[code]) code = createShareCode();
+  const share: NavShare = {
+    code,
+    categoryTitle: category.title,
+    categoryDescription: category.description,
+    links,
+    expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+    sharerName: 'Dash 预览访客',
+  };
+  shares[code] = share;
+  writeLocalPreviewShares(shares);
+  return { code, expiresAt: share.expiresAt, sharerName: share.sharerName };
+};
 
 const quotaErrorMessage = (message: string) => {
   if (message.includes('QUOTA_CATEGORY_LIMIT')) {
@@ -247,11 +280,18 @@ export const fetchFaviconData = async (url: string): Promise<string> => {
 };
 
 export function useCategories() {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const { isPreview, requestLogin } = useContext(PreviewContext);
+  const [categories, setCategories] = useState<Category[]>(isPreview ? PREVIEW_CATEGORIES : []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchCategories = useCallback(async () => {
+    if (isPreview) {
+      setCategories(PREVIEW_CATEGORIES);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -342,9 +382,16 @@ export function useCategories() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isPreview]);
+
+  const blockPreviewWrite = () => {
+    if (!isPreview) return false;
+    requestLogin('save');
+    return true;
+  };
 
   const addItem = async (categoryId: string, item: Omit<LinkItem, 'id'>) => {
+    if (blockPreviewWrite()) return false;
     try {
       const userId = await getCurrentUserId();
       if (!userId) throw new Error('Please sign in before adding a site.');
@@ -374,6 +421,7 @@ export function useCategories() {
   };
 
   const updateItem = async (categoryId: string, itemId: string, updatedItem: Partial<LinkItem> & { categoryId?: string }) => {
+    if (blockPreviewWrite()) return;
     try {
       const patch: Record<string, string | null> = {
         updated_at: new Date().toISOString(),
@@ -401,6 +449,7 @@ export function useCategories() {
   };
 
   const deleteItem = async (categoryId: string, itemId: string) => {
+    if (blockPreviewWrite()) return;
     try {
       const { error: deleteError } = await supabase
         .from('nav_links')
@@ -417,6 +466,7 @@ export function useCategories() {
   };
 
   const deleteCategory = async (categoryId: string) => {
+    if (blockPreviewWrite()) return;
     try {
       const { error: deleteError } = await supabase
         .from('nav_categories')
@@ -432,6 +482,7 @@ export function useCategories() {
   };
 
   const createCategory = async (category: Partial<Category> & { id: string; title: string; description: string }) => {
+    if (blockPreviewWrite()) return null;
     try {
       const userId = await getCurrentUserId();
       if (!userId) throw new Error('Please sign in before saving a category.');
@@ -466,11 +517,47 @@ export function useCategories() {
 
   const createShare = async (category: Category, linkIds: string[]) => {
     try {
-      const userId = await getCurrentUserId();
-      if (!userId) throw new Error('Please sign in before sharing links.');
-
       const links = category.items.filter((item) => linkIds.includes(item.id));
       if (links.length === 0) throw new Error('Select at least one site to share.');
+
+      if (isPreview) {
+        if (import.meta.env.DEV) {
+          return createLocalPreviewShare(category, links);
+        }
+
+        try {
+          const previewSupabase = getPreviewSupabase();
+          const { data: existing } = await previewSupabase.auth.getSession();
+          if (!existing.session) {
+            const captchaToken = await getTurnstileToken('preview_share');
+            const { error: signInError } = await previewSupabase.auth.signInAnonymously({
+              options: captchaToken ? { captchaToken } : undefined,
+            });
+            if (signInError) throw signInError;
+          }
+
+          const { data, error: previewError } = await previewSupabase.rpc('create_preview_share', {
+            p_category_title: category.title,
+            p_category_description: category.description,
+            p_links: links.map((link) => ({
+              id: link.id,
+              name: link.name,
+              url: link.url,
+              description: link.description,
+              icon: link.icon,
+              faviconUrl: link.faviconUrl ?? '',
+            })),
+          });
+          if (previewError) throw previewError;
+          const row = Array.isArray(data) ? data[0] : data;
+          return { code: row.code as string, expiresAt: row.expires_at as string, sharerName: 'Dash 预览访客' };
+        } catch (previewError) {
+          throw previewError;
+        }
+      }
+
+      const userId = await getCurrentUserId();
+      if (!userId) throw new Error('Please sign in before sharing links.');
 
       const { data: profileRow } = await supabase
         .from('profiles')
@@ -533,7 +620,24 @@ export function useCategories() {
       const normalizedCode = normalizeShareCode(code);
       if (!normalizedCode) throw new Error('Enter a share code.');
 
-      const { data, error: shareError } = await supabase.rpc('get_nav_share', { share_code: normalizedCode });
+      if (isPreview && import.meta.env.DEV) {
+        const localShare = readLocalPreviewShares()[normalizedCode];
+        if (localShare) return localShare;
+      }
+
+      if (isPreview) {
+        const previewSupabase = getPreviewSupabase();
+        const { data: existing } = await previewSupabase.auth.getSession();
+        if (!existing.session) {
+          const captchaToken = await getTurnstileToken('preview_share_read');
+          const { error: signInError } = await previewSupabase.auth.signInAnonymously({
+            options: captchaToken ? { captchaToken } : undefined,
+          });
+          if (signInError) throw signInError;
+        }
+      }
+      const shareClient = isPreview ? getPreviewSupabase() : supabase;
+      const { data, error: shareError } = await shareClient.rpc('get_nav_share', { share_code: normalizedCode });
       if (shareError) throw shareError;
 
       const row = Array.isArray(data) ? data[0] : data;
@@ -559,6 +663,22 @@ export function useCategories() {
 
   const deleteShare = async (code: string) => {
     try {
+      if (isPreview) {
+        const normalizedCode = normalizeShareCode(code);
+        if (!normalizedCode) return false;
+        if (import.meta.env.DEV) {
+          const shares = readLocalPreviewShares();
+          if (shares[normalizedCode]) {
+            delete shares[normalizedCode];
+            writeLocalPreviewShares(shares);
+            return true;
+          }
+        }
+        const previewSupabase = getPreviewSupabase();
+        const { error: deleteError } = await previewSupabase.from('nav_shares').delete().eq('code', normalizedCode);
+        if (deleteError) throw deleteError;
+        return true;
+      }
       const userId = await getCurrentUserId();
       const normalizedCode = normalizeShareCode(code);
       if (!userId || !normalizedCode) return false;
@@ -579,6 +699,7 @@ export function useCategories() {
   };
 
   const importSharedLinks = async (categoryId: string, links: LinkItem[]) => {
+    if (blockPreviewWrite()) return false;
     try {
       const userId = await getCurrentUserId();
       if (!userId) throw new Error('Please sign in before importing links.');
@@ -610,6 +731,7 @@ export function useCategories() {
   };
 
   const migrateFavicons = async () => {
+    if (blockPreviewWrite()) return;
     try {
       for (const category of categories) {
         for (const item of category.items) {

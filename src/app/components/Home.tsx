@@ -5,6 +5,7 @@ import { useCategories } from '../hooks/useCategories';
 import { LangContext, ThemeContext, WallpaperContext } from '../App';
 import { motion } from 'motion/react';
 import { CUSTOM_WALLPAPER_ID, DEFAULT_WALLPAPER_ID, clampCardOpacity, getWallpaperById } from '../wallpapers';
+import { sampleWallpaperContrast, toneForWallpaperLuminance, type WallpaperContrastSample } from '../lib/wallpaperContrast';
 
 const iconMap: Record<string, React.ReactNode> = {
   'book': <Library className="w-5 h-5" />,
@@ -43,17 +44,22 @@ const categoryIconMap: Record<string, React.ReactNode> = {
   'Learning': <GraduationCap className="w-5 h-5" />,
   'AI工具': <BrainCircuit className="w-5 h-5" />,
   'AI Tools': <BrainCircuit className="w-5 h-5" />,
+  'AI 工具': <BrainCircuit className="w-5 h-5" />,
   'AI Assistant': <BrainCircuit className="w-5 h-5" />,
   'Entertainment': <Video className="w-5 h-5" />,
   '娱乐': <Video className="w-5 h-5" />,
   'Tools': <Settings className="w-5 h-5" />,
   'Productivity': <Settings className="w-5 h-5" />,
+  '效率办公': <Rocket className="w-5 h-5" />,
   'Development': <Code className="w-5 h-5" />,
   'Social': <MessageSquare className="w-5 h-5" />,
   'Shopping': <ShoppingCart className="w-5 h-5" />,
   'Travel': <Plane className="w-5 h-5" />,
   'Music': <Music className="w-5 h-5" />,
   'Design': <Palette className="w-5 h-5" />,
+  '设计灵感': <Palette className="w-5 h-5" />,
+  '内容社区': <MessageSquare className="w-5 h-5" />,
+  '常用邮箱': <Mail className="w-5 h-5" />,
   'Gaming': <Gamepad2 className="w-5 h-5" />,
   'Food': <UtensilsCrossed className="w-5 h-5" />,
   'Fitness': <Dumbbell className="w-5 h-5" />,
@@ -89,89 +95,6 @@ const categoryColorMap: Record<string, { bgColor: string; textColor: string }> =
 };
 
 const preconnectedOrigins = new Set<string>();
-
-type RgbColor = {
-  r: number;
-  g: number;
-  b: number;
-};
-
-const clampByte = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
-
-const toRgba = (color: RgbColor, alpha: number) =>
-  `rgba(${clampByte(color.r)}, ${clampByte(color.g)}, ${clampByte(color.b)}, ${alpha})`;
-
-const relativeLuminance = ({ r, g, b }: RgbColor) => {
-  const convert = (value: number) => {
-    const channel = value / 255;
-    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * convert(r) + 0.7152 * convert(g) + 0.0722 * convert(b);
-};
-
-const loadSampleImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
-  const image = new Image();
-  image.crossOrigin = 'anonymous';
-  image.onload = () => resolve(image);
-  image.onerror = () => reject(new Error('Could not sample wallpaper.'));
-  image.src = src;
-});
-
-const averageImageRegion = (data: Uint8ClampedArray, width: number, fromX: number, toX: number): RgbColor => {
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let weightTotal = 0;
-
-  for (let y = 0; y < width; y += 1) {
-    for (let x = fromX; x < toX; x += 1) {
-      const index = (y * width + x) * 4;
-      const alpha = data[index + 3] / 255;
-      if (alpha < 0.1) continue;
-
-      const pr = data[index];
-      const pg = data[index + 1];
-      const pb = data[index + 2];
-      const max = Math.max(pr, pg, pb);
-      const min = Math.min(pr, pg, pb);
-      const weight = alpha * (1 + (max - min) / 255);
-      r += pr * weight;
-      g += pg * weight;
-      b += pb * weight;
-      weightTotal += weight;
-    }
-  }
-
-  if (weightTotal === 0) return { r: 31, g: 41, b: 55 };
-  return { r: r / weightTotal, g: g / weightTotal, b: b / weightTotal };
-};
-
-const sampleWallpaperLook = async (src: string, isDark: boolean) => {
-  const image = await loadSampleImage(src);
-  const size = 72;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  if (!context) throw new Error('Could not sample wallpaper.');
-
-  const scale = Math.max(size / image.naturalWidth, size / image.naturalHeight);
-  const drawWidth = image.naturalWidth * scale;
-  const drawHeight = image.naturalHeight * scale;
-  context.drawImage(image, (size - drawWidth) / 2, (size - drawHeight) / 2, drawWidth, drawHeight);
-
-  const pixels = context.getImageData(0, 0, size, size).data;
-  const left = averageImageRegion(pixels, size, 0, size / 2);
-  const right = averageImageRegion(pixels, size, size / 2, size);
-  const side = averageImageRegion(pixels, size, 0, Math.max(12, Math.round(size * 0.22)));
-  const colorScale = isDark ? 0.54 : 1;
-  const alpha = isDark ? 0.86 : 0.78;
-
-  return {
-    gradient: `linear-gradient(90deg, ${toRgba({ r: left.r * colorScale, g: left.g * colorScale, b: left.b * colorScale }, alpha)}, ${toRgba({ r: right.r * colorScale, g: right.g * colorScale, b: right.b * colorScale }, alpha)})`,
-    sideNavTone: relativeLuminance(side) < 0.46 ? 'light' : 'dark',
-  } as const;
-};
 
 const addResourceHint = (rel: 'dns-prefetch' | 'preconnect', href: string) => {
   if (document.head.querySelector(`link[rel="${rel}"][href="${href}"]`)) return;
@@ -264,6 +187,9 @@ export default function Home() {
   const [engineOpen, setEngineOpen] = useState(false);
   const engineDropdownRef = useRef<HTMLDivElement>(null);
   const { categories, loading } = useCategories();
+  const [showFavicons] = useState(() => {
+    try { return sessionStorage.getItem('dash-category-favicons') !== 'hidden'; } catch { return true; }
+  });
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loadingWeather, setLoadingWeather] = useState(true);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => {
@@ -280,7 +206,7 @@ export default function Home() {
   const [highlightedSiteId, setHighlightedSiteId] = useState<string | null>(null);
   const [hoveredCatIdx, setHoveredCatIdx] = useState<number | null>(null);
   const [activeCatIdx, setActiveCatIdx] = useState<number | null>(null);
-  const [sampledWallpaperLook, setSampledWallpaperLook] = useState<{ gradient: string; sideNavTone: 'light' | 'dark' } | null>(null);
+  const [sampledWallpaperLook, setSampledWallpaperLook] = useState<WallpaperContrastSample | null>(null);
   const siteSearchInputRef = useRef<HTMLInputElement>(null);
 
   // Draggable FAB state
@@ -295,10 +221,6 @@ export default function Home() {
     ? wallpaperSettings.customWallpaperUrl
     : builtInWallpaper?.src;
   const hasWallpaper = Boolean(wallpaperUrl && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
-  const useLightCategoryForeground = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightCategoryForeground === 'light';
-  const useLightSideNav = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightSideNav === 'light';
-  const useDarkSideNav = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightSideNav === 'dark';
-  const useLightWeatherForeground = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightWeatherForeground === 'light';
   const useDarkerMutedForeground = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightMutedForeground === 'dark';
   const useDarkGlassSurface = isDark || (!isDark && builtInWallpaper?.appearance?.lightSurface === 'dark');
   const darkOverlayMode = builtInWallpaper?.appearance?.darkOverlay ?? 'default';
@@ -306,11 +228,45 @@ export default function Home() {
   const cardOpacity = clampCardOpacity(wallpaperSettings.cardOpacity);
   const topSurfaceOpacity = Math.min(0.9, cardOpacity + 0.15);
   const searchSurfaceOpacity = cardOpacity < 0.5 ? Math.max(0.1, cardOpacity - 0.15) : cardOpacity;
-  const categoryWallpaperTextClass = useLightCategoryForeground ? 'text-white drop-shadow-sm' : 'text-gray-950 drop-shadow-sm dark:text-white';
+  const wallpaperSearchLuminance = sampledWallpaperLook?.searchLuminance;
+  const pageAdjustedSearchLuminance = wallpaperSearchLuminance == null
+    ? null
+    : isDark
+      ? wallpaperSearchLuminance * (showDarkWallpaperOverlay ? 0.4 : 1)
+      : wallpaperSearchLuminance * 0.65 + 0.35;
+  const composedSearchLuminance = pageAdjustedSearchLuminance == null
+    ? null
+    : pageAdjustedSearchLuminance * (1 - searchSurfaceOpacity) + (useDarkGlassSurface ? 0.01 : 1) * searchSurfaceOpacity;
+  const searchUsesLightText = hasWallpaper
+    ? composedSearchLuminance == null
+      ? useDarkGlassSurface || cardOpacity < 0.35
+      : composedSearchLuminance < 0.48
+    : isDark;
+  const categoryTone = toneForWallpaperLuminance(
+    sampledWallpaperLook?.homeCategoryLuminance,
+    isDark,
+    showDarkWallpaperOverlay,
+    isDark ? 'light' : 'dark',
+  );
+  const weatherTone = toneForWallpaperLuminance(
+    sampledWallpaperLook?.weatherLuminance,
+    isDark,
+    showDarkWallpaperOverlay,
+    isDark ? 'light' : 'dark',
+  );
+  const footerTone = toneForWallpaperLuminance(
+    sampledWallpaperLook?.footerLuminance,
+    isDark,
+    showDarkWallpaperOverlay,
+    isDark ? 'light' : 'dark',
+  );
+  const categoryWallpaperTextClass = categoryTone === 'light' ? 'text-white drop-shadow-sm' : 'text-gray-950 drop-shadow-sm';
   const wallpaperPrimaryTextClass = useDarkGlassSurface ? 'text-white drop-shadow-sm' : 'text-gray-950 drop-shadow-sm dark:text-white';
-  const wallpaperSecondaryTextClass = useDarkGlassSurface ? 'text-white/75 drop-shadow-sm' : useDarkerMutedForeground ? 'text-gray-800' : 'text-gray-700 dark:text-zinc-200';
+  const wallpaperSecondaryTextClass = useDarkGlassSurface ? 'text-white/80 drop-shadow-sm' : useDarkerMutedForeground ? 'text-gray-900' : 'text-gray-700 dark:text-zinc-200';
   const wallpaperControlTextClass = useDarkGlassSurface ? 'text-white' : 'text-gray-950 dark:text-white';
-  const weatherTextClass = useLightWeatherForeground ? 'text-white drop-shadow-sm' : hasWallpaper ? 'text-gray-800 drop-shadow-sm dark:text-gray-100' : 'text-gray-700 dark:text-gray-300';
+  const weatherTextClass = hasWallpaper
+    ? weatherTone === 'light' ? 'text-white drop-shadow-sm' : 'text-gray-900 drop-shadow-sm'
+    : 'text-gray-700 dark:text-gray-300';
   const siteSearchTextClass = hasWallpaper && useDarkGlassSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
   const siteSearchMutedTextClass = hasWallpaper && useDarkGlassSurface ? 'text-white/70' : useDarkerMutedForeground ? 'text-gray-800' : 'text-gray-600 dark:text-gray-400';
   const siteSearchFaintTextClass = hasWallpaper && useDarkGlassSurface ? 'text-white/55' : useDarkerMutedForeground ? 'text-gray-700' : 'text-gray-500 dark:text-gray-400';
@@ -322,29 +278,30 @@ export default function Home() {
     ? (isDark ? builtInWallpaper.bannerGradient.dark : builtInWallpaper.bannerGradient.light)
     : sampledWallpaperLook?.gradient;
   const sideNavTone = hasWallpaper
-    ? (useDarkSideNav ? 'dark' : sampledWallpaperLook?.sideNavTone ?? (useLightSideNav || isDark ? 'light' : 'dark'))
+    ? toneForWallpaperLuminance(sampledWallpaperLook?.sideNavLuminance, isDark, showDarkWallpaperOverlay, isDark ? 'light' : 'dark')
     : 'dark';
   const sideNavTextClass = sideNavTone === 'light' ? 'text-white drop-shadow-sm' : 'text-gray-900';
   const sideNavMarkerClass = sideNavTone === 'light' ? 'bg-white' : 'bg-gray-900';
+  const footerWallpaperTextClass = footerTone === 'light' ? 'text-white drop-shadow-sm' : 'text-gray-900 drop-shadow-sm';
   const glassSurfaceStyle = hasWallpaper
     ? {
         backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${cardOpacity})` : `rgba(255, 255, 255, ${cardOpacity})`,
-        backdropFilter: 'blur(14px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+        backdropFilter: 'blur(20px) saturate(1.25)',
+        WebkitBackdropFilter: 'blur(20px) saturate(1.25)',
       }
     : undefined;
   const topGlassSurfaceStyle = hasWallpaper
     ? {
         backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
-        backdropFilter: 'blur(14px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+        backdropFilter: 'blur(18px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
       }
     : undefined;
   const searchSurfaceStyle = hasWallpaper
     ? {
         backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${searchSurfaceOpacity})` : `rgba(255, 255, 255, ${searchSurfaceOpacity})`,
-        backdropFilter: 'blur(14px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+        backdropFilter: 'blur(8px) saturate(1.1)',
+        WebkitBackdropFilter: 'blur(8px) saturate(1.1)',
       }
     : undefined;
 
@@ -360,7 +317,7 @@ export default function Home() {
     }
 
     let cancelled = false;
-    sampleWallpaperLook(wallpaperUrl, isDark)
+    sampleWallpaperContrast(wallpaperUrl, isDark)
       .then((look) => {
         if (!cancelled) setSampledWallpaperLook(look);
       })
@@ -636,7 +593,9 @@ export default function Home() {
       );
       return data.address?.city || data.address?.county || data.address?.state || (language === 'zh' ? '未知位置' : 'Unknown');
     } catch (error) {
-      console.error('Error fetching city name:', error);
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        console.warn('Could not fetch city name:', error);
+      }
       return language === 'zh' ? '未知位置' : 'Unknown';
     }
   };
@@ -664,7 +623,10 @@ export default function Home() {
         });
         setLoadingWeather(false);
       } catch (error) {
-        console.error('Error fetching weather data:', error);
+        const errorName = error instanceof Error ? error.name : (error as { name?: string } | null)?.name;
+        if (errorName !== 'AbortError') {
+          console.error('Error fetching weather data:', error);
+        }
         setLoadingWeather(false);
       }
     };
@@ -756,7 +718,7 @@ export default function Home() {
         </>
       )}
       {/* 主要内容 */}
-      <main className="relative z-10 max-w-[1200px] mx-auto px-6 lg:px-20 py-8">
+      <main className="relative z-10 mx-auto min-w-0 w-full max-w-[1200px] px-6 py-8 lg:px-20">
         {/* 搜索区域 */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -768,40 +730,42 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2, duration: 0.5 }}
-            className={`mb-4 flex items-center gap-3 text-sm font-light ${weatherTextClass}`}
+            className={`mb-4 flex flex-col items-center gap-1 text-sm font-light sm:flex-row sm:gap-3 ${weatherTextClass}`}
           >
             <span>{getCurrentDate()}</span>
-            {loadingWeather ? (
-              <span>{lang === 'en' ? 'Loading...' : '加载中...'}</span>
-            ) : weather ? (
-              <>
-                <span>{lang === 'en' ? weather.cityEn : weather.city}</span>
-                {getWeatherIcon(weather.weatherCode)}
-                <span>{weather.temperature}°C</span>
-                <span>{getWeatherDescription(weather.weatherCode)}</span>
-              </>
-            ) : (
-              <>
-                <span>{lang === 'en' ? 'Beijing' : '北京'}</span>
-                <Sun className="w-4 h-4" />
-                <span>22°C</span>
-                <span>{lang === 'en' ? 'Sunny' : '晴朗'}</span>
-              </>
-            )}
+            <span className="flex items-center gap-3">
+              {loadingWeather ? (
+                <span>{lang === 'en' ? 'Loading...' : '加载中...'}</span>
+              ) : weather ? (
+                <>
+                  <span>{lang === 'en' ? weather.cityEn : weather.city}</span>
+                  {getWeatherIcon(weather.weatherCode)}
+                  <span>{weather.temperature}°C</span>
+                  <span>{getWeatherDescription(weather.weatherCode)}</span>
+                </>
+              ) : (
+                <>
+                  <span>{lang === 'en' ? 'Beijing' : '北京'}</span>
+                  <Sun className="w-4 h-4" />
+                  <span>22°C</span>
+                  <span>{lang === 'en' ? 'Sunny' : '晴朗'}</span>
+                </>
+              )}
+            </span>
           </motion.div>
           <motion.form
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3, duration: 0.5, ease: "easeOut" }}
             onSubmit={handleSearch}
-            className="relative group w-full"
+            className="relative z-30 group w-full"
           >
             <Search
               strokeWidth={2.25}
               className={`pointer-events-none absolute left-4 top-1/2 z-10 h-[22px] w-[22px] -translate-y-1/2 transition-colors ${
                 hasWallpaper ? '' : 'group-focus-within:text-gray-900 dark:group-focus-within:text-gray-100'
               } ${
-                hasWallpaper ? (useDarkGlassSurface ? 'text-white drop-shadow-sm' : 'text-gray-700') : 'text-gray-500 dark:text-gray-400'
+                hasWallpaper ? (searchUsesLightText ? 'text-white drop-shadow-sm' : 'text-gray-800') : 'text-gray-500 dark:text-gray-400'
               }`}
             />
             <input
@@ -815,23 +779,23 @@ export default function Home() {
                     ? (lang === 'en' ? 'Search with Baidu...' : '百度一下...')
                     : (lang === 'en' ? 'Search with Bing...' : '用必应搜索...')
               }
-              style={searchSurfaceStyle}
-              className={`w-full pl-11 pr-14 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-gray-100/10 focus:border-gray-900 dark:focus:border-gray-400 focus:shadow-md transition-all duration-300 shadow-sm text-base ${
+              style={{ ...searchSurfaceStyle, ...(hasWallpaper ? { borderWidth: 0.9 } : {}) }}
+              className={`w-full pl-[3.25rem] pr-14 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-gray-100/10 focus:border-gray-900 dark:focus:border-gray-400 focus:shadow-md transition-all duration-300 shadow-sm text-base ${
                 hasWallpaper
-                  ? `${useDarkGlassSurface ? 'text-white placeholder:text-white/75' : 'text-gray-950 placeholder:text-gray-600'} border-white/55 shadow-lg dark:border-white/10`
+                  ? `${searchUsesLightText ? 'text-white placeholder:text-white/80' : 'text-gray-950 placeholder:text-gray-700'} border-white/55 shadow-lg dark:border-white/10`
                   : 'bg-white dark:bg-zinc-800 border-gray-300 dark:border-zinc-600 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500'
               }`}
             />
             {/* Search engine selector */}
             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-              <div className={`w-px h-5 ${hasWallpaper ? (useDarkGlassSurface ? 'bg-white/30' : 'bg-gray-900/30 dark:bg-white/30') : 'bg-gray-200 dark:bg-zinc-600'}`} />
+              <div className={`w-px h-5 ${hasWallpaper ? (searchUsesLightText ? 'bg-white/35' : 'bg-gray-900/30') : 'bg-gray-200 dark:bg-zinc-600'}`} />
               <div className="relative" ref={engineDropdownRef}>
                 <button
                   type="button"
                   onClick={() => setEngineOpen(o => !o)}
                   className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
                     hasWallpaper
-                      ? `${useDarkGlassSurface ? 'text-white/85 hover:bg-white/10' : 'text-gray-900 hover:bg-white/20 dark:text-gray-100 dark:hover:bg-white/10'}`
+                      ? `${searchUsesLightText ? 'text-white/90 hover:bg-white/15' : 'text-gray-900 hover:bg-white/20'}`
                       : 'text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700'
                   }`}
                   title={searchEngine === 'google' ? 'Google Search' : searchEngine === 'baidu' ? '百度搜索' : 'Bing Search'}
@@ -841,7 +805,7 @@ export default function Home() {
                 {engineOpen && (
                   <div
                     style={topGlassSurfaceStyle}
-                    className={`absolute right-0 top-full z-[80] mt-2 w-28 overflow-hidden rounded-lg border shadow-lg ${
+                    className={`absolute right-0 top-full z-[100] mt-2 w-28 overflow-hidden rounded-lg border shadow-lg ${
                       hasWallpaper
                         ? 'border-white/45 dark:border-white/10'
                         : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-800'
@@ -903,7 +867,7 @@ export default function Home() {
                     <button
                       onClick={() => toggleCategory(category.id)}
                       className={`p-1 rounded-md transition-colors ${
-                        hasWallpaper ? `${useLightCategoryForeground ? 'text-white hover:bg-white/10' : 'text-gray-900 hover:bg-white/40 dark:text-white dark:hover:bg-white/10'}` : 'hover:bg-gray-100 dark:hover:bg-zinc-800'
+                        hasWallpaper ? `${categoryTone === 'light' ? 'text-white hover:bg-white/10' : 'text-gray-900 hover:bg-white/40'}` : 'hover:bg-gray-100 dark:hover:bg-zinc-800'
                       }`}
                       aria-label={collapsedCategories.has(category.id) ? "Expand category" : "Collapse category"}
                     >
@@ -947,11 +911,15 @@ export default function Home() {
                             ? 'border-white/55 bg-white/70 shadow-sm dark:border-white/10 dark:bg-white/10'
                             : 'bg-white dark:bg-zinc-700 border-gray-200 dark:border-zinc-600'
                         }`}>
-                          <FaviconImage
-                            src={item.faviconUrl}
-                            alt={`${item.name} favicon`}
-                            fallback={iconMap[item.icon] || <Library className="w-6 h-6 text-gray-700 dark:text-gray-300" />}
-                          />
+                          {showFavicons ? (
+                            <FaviconImage
+                              src={item.faviconUrl}
+                              alt={`${item.name} favicon`}
+                              fallback={iconMap[item.icon] || <Library className="w-6 h-6 text-gray-700 dark:text-gray-300" />}
+                            />
+                          ) : (
+                            iconMap[item.icon] || <Library className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+                          )}
                         </div>
                         <div className="min-w-0">
                           <p className={`text-base font-semibold leading-[22px] truncate ${hasWallpaper ? wallpaperPrimaryTextClass : 'text-gray-900 dark:text-gray-100'}`} title={item.name}>{item.name}</p>
@@ -978,7 +946,7 @@ export default function Home() {
               style={bannerGradient ? { background: bannerGradient } : undefined}
             ></div>
             <div className="relative z-10 text-center space-y-4 px-6">
-              <h1 className="text-4xl font-bold text-white tracking-tight">{lang === 'en' ? 'Focus on what matters.' : '专注于真正重要的事。'}</h1>
+              <h1 className="whitespace-nowrap text-2xl font-bold leading-tight tracking-tight text-white sm:text-4xl">{lang === 'en' ? 'Focus on what matters.' : '专注于真正重要的事。'}</h1>
               <p className="text-lg text-white/80 max-w-lg mx-auto">{lang === 'en' ? 'Your digital launchpad for a focused and organized day across the web.' : '你的数字导航台，让每一天都井然有序、高效专注。'}</p>
             </div>
           </motion.div>
@@ -1037,7 +1005,7 @@ export default function Home() {
             initial={{ opacity: 0, y: -16, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            style={glassSurfaceStyle}
+            style={topGlassSurfaceStyle}
             className={`relative z-10 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden border ${
               hasWallpaper
                 ? 'border-white/45 dark:border-white/10'
@@ -1073,7 +1041,7 @@ export default function Home() {
             </div>
 
             {/* 搜索结果 */}
-            <div className="max-h-[60vh] overflow-y-auto">
+            <div className="dash-scrollbar max-h-[60vh] overflow-y-auto">
               {siteSearchQuery.trim() === '' ? (
                 <div className={`px-4 py-10 text-center text-sm ${siteSearchFaintTextClass}`}>
                   {lang === 'en' ? 'Type to search by name, description, or URL' : '输入关键词搜索网站名称、描述或地址'}
@@ -1089,11 +1057,15 @@ export default function Home() {
                       <div className={`relative flex items-center gap-3 rounded-xl px-3 py-3 transition-colors group ${siteSearchHoverClass}`}>
                         {/* 图标 */}
                         <div className="w-9 h-9 rounded-lg bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5">
-                          <FaviconImage
-                            src={site.faviconUrl}
-                            alt=""
-                            fallback={<Library className="w-4 h-4 text-gray-500 dark:text-gray-400" />}
-                          />
+                          {showFavicons ? (
+                            <FaviconImage
+                              src={site.faviconUrl}
+                              alt=""
+                              fallback={iconMap[site.icon] || <Library className="w-4 h-4 text-gray-500 dark:text-gray-400" />}
+                            />
+                          ) : (
+                            iconMap[site.icon] || <Library className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                          )}
                         </div>
 
                         {/* 信息 */}
@@ -1164,11 +1136,11 @@ export default function Home() {
           : 'border-gray-200 bg-gray-100 dark:border-zinc-800 dark:bg-zinc-900'
       }`}>
         <div className="max-w-[1200px] mx-auto px-8 py-12 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-          <p className={`text-xs uppercase tracking-widest ${hasWallpaper ? sideNavTextClass : 'text-gray-600 dark:text-gray-400'}`}>© 2024 Minimalist Dash. Designed for focus.</p>
+          <p className={`text-xs uppercase tracking-widest ${hasWallpaper ? footerWallpaperTextClass : 'text-gray-600 dark:text-gray-400'}`}>© 2024 Minimalist Dash. Designed for focus.</p>
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-            <RouterLink to="/docs" className={`text-xs transition-colors uppercase tracking-widest ${hasWallpaper ? `${sideNavTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>Documentation</RouterLink>
-            <a href="https://github.com/tutorzavcedoru9752-cmd/Dash-Navigation" target="_blank" rel="noreferrer" className={`text-xs transition-colors uppercase tracking-widest ${hasWallpaper ? `${sideNavTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>GitHub</a>
-            <RouterLink to="/privacy" className={`text-xs transition-colors uppercase tracking-widest ${hasWallpaper ? `${sideNavTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>Privacy Policy</RouterLink>
+            <RouterLink to="/docs" className={`text-xs transition-colors uppercase tracking-widest ${hasWallpaper ? `${footerWallpaperTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>Documentation</RouterLink>
+            <a href="https://github.com/tutorzavcedoru9752-cmd/Dash-Navigation" target="_blank" rel="noreferrer" className={`text-xs transition-colors uppercase tracking-widest ${hasWallpaper ? `${footerWallpaperTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>GitHub</a>
+            <RouterLink to="/privacy" className={`text-xs transition-colors uppercase tracking-widest ${hasWallpaper ? `${footerWallpaperTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>Privacy Policy</RouterLink>
           </div>
         </div>
       </footer>
