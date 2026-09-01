@@ -2,3 +2,18 @@
 @source '../**/*.{js,ts,jsx,tsx}';
 
 @import 'tw-animate-css';
+
+@keyframes dash-xianyu-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.dash-xianyu-link {
+  background-image: linear-gradient(90deg, #111827, #b7791f, #111827);
+  background-size: 200% auto;
+  animation: dash-xianyu-gradient 4s linear infinite;
+}

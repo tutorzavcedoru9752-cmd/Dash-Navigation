@@ -382,6 +382,8 @@ export default function Categories() {
   const darkOverlayMode = builtInWallpaper?.appearance?.darkOverlay ?? 'default';
   const showDarkWallpaperOverlay = isDark && darkOverlayMode !== 'none';
   const cardOpacity = clampCardOpacity(wallpaperSettings.cardOpacity);
+  const topSurfaceOpacity = Math.min(0.9, cardOpacity + 0.15);
+  const useDarkerMutedForeground = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightMutedForeground === 'dark';
   const glassSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
         backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${cardOpacity})` : `rgba(255, 255, 255, ${cardOpacity})`,
@@ -389,15 +391,29 @@ export default function Categories() {
         WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
       }
     : undefined;
+  const topGlassSurfaceStyle: CSSProperties | undefined = hasWallpaper
+    ? {
+        backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
+        backdropFilter: 'blur(14px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+      }
+    : undefined;
+  const reducedFillSurfaceStyle: CSSProperties | undefined = hasWallpaper
+    ? {
+        backgroundColor: useDarkGlassSurface ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.30)',
+        backdropFilter: 'blur(8px) saturate(1.12)',
+        WebkitBackdropFilter: 'blur(8px) saturate(1.12)',
+      }
+    : undefined;
   const categoryTextClass = hasWallpaper && (useDarkGlassSurface || builtInWallpaper?.appearance?.lightCategoryForeground === 'light')
     ? 'text-white drop-shadow-sm'
     : 'text-gray-900 dark:text-gray-100';
   const mutedTextClass = hasWallpaper && useDarkGlassSurface
     ? 'text-white/70'
-    : 'text-gray-600 dark:text-gray-400';
+    : useDarkerMutedForeground ? 'text-gray-800' : 'text-gray-600 dark:text-gray-400';
   const faintTextClass = hasWallpaper && useDarkGlassSurface
     ? 'text-white/55'
-    : 'text-gray-500 dark:text-gray-400';
+    : useDarkerMutedForeground ? 'text-gray-700' : 'text-gray-500 dark:text-gray-400';
   const cardPrimaryTextClass = hasWallpaper && useDarkGlassSurface
     ? 'text-white'
     : 'text-gray-900 dark:text-gray-100';
@@ -410,6 +426,9 @@ export default function Categories() {
   const glassHoverClass = hasWallpaper
     ? 'hover:border-white/70 dark:hover:border-white/20'
     : 'hover:border-gray-300 hover:shadow-lg dark:hover:border-gray-600';
+  const modalSurfaceClass = hasWallpaper
+    ? 'border-white/35 dark:border-white/10'
+    : 'bg-white dark:bg-zinc-800';
 
   const hostnameFor = (url: string) => {
     try {
@@ -1095,7 +1114,7 @@ export default function Categories() {
             {/* Add New Link Placeholder — always visible */}
             <button
               onClick={startAddNew}
-              style={glassSurfaceStyle}
+              style={reducedFillSurfaceStyle ?? glassSurfaceStyle}
               className={`col-span-2 flex min-h-[136px] flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 transition-all group md:min-h-[164px] lg:col-span-3 ${
                 hasWallpaper
                   ? `${useDarkGlassSurface ? 'border-white/25 text-white/75 hover:border-white/45 hover:bg-white/10 hover:text-white' : 'border-gray-900/20 text-gray-800 hover:border-gray-900/35 hover:bg-white/40'}`
@@ -1140,7 +1159,8 @@ export default function Categories() {
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ type: "spring", duration: 0.3 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          style={topGlassSurfaceStyle}
+          className={`relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
         >
           <div className="flex items-center gap-2 mb-6">
             <Plus className="w-5 h-5 text-gray-900 dark:text-gray-100" />
@@ -1217,7 +1237,8 @@ export default function Categories() {
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ type: "spring", duration: 0.3 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          style={topGlassSurfaceStyle}
+          className={`relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
         >
           <div className="flex items-center gap-2 mb-6">
             <Settings className="w-5 h-5 text-gray-900 dark:text-gray-100" />
@@ -1294,7 +1315,8 @@ export default function Categories() {
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ type: "spring", duration: 0.3 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          style={topGlassSurfaceStyle}
+          className={`relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
         >
           <div className="flex items-center gap-2 mb-6">
             {editingItem ? <Edit2 className="w-5 h-5 text-gray-900 dark:text-gray-100" /> : <Plus className="w-5 h-5 text-gray-900 dark:text-gray-100" />}
@@ -1384,7 +1406,8 @@ export default function Categories() {
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ type: "spring", duration: 0.3 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+          style={topGlassSurfaceStyle}
+          className={`relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
         >
           <div className="mb-6 flex items-center gap-2">
             <Share2 className="w-5 h-5 text-gray-900 dark:text-gray-100" />
@@ -1479,7 +1502,8 @@ export default function Categories() {
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ type: "spring", duration: 0.3 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+          style={topGlassSurfaceStyle}
+          className={`relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
         >
           <div className="mb-6 flex items-center gap-3">
             <div className="flex items-center gap-3">
@@ -1670,12 +1694,11 @@ export default function Categories() {
         : 'border-gray-200 bg-gray-100 dark:border-zinc-800 dark:bg-zinc-900'
     }`}>
       <div className="max-w-[1200px] mx-auto px-8 py-12 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-        <p className={`text-xs uppercase tracking-widest ${hasWallpaper ? categoryTextClass : 'text-gray-600 dark:text-gray-400'}`}>{t.footer}</p>
+        <p className={`text-xs uppercase tracking-widest ${hasWallpaper ? categoryTextClass : 'text-gray-600 dark:text-gray-400'}`}>© 2024 Minimalist Dash. Designed for focus.</p>
         <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-          <RouterLink to="/privacy" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>{t.privacy}</RouterLink>
-          <RouterLink to="/terms" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>{t.terms}</RouterLink>
-          <RouterLink to="/docs" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>{t.docs}</RouterLink>
-          <RouterLink to="/help" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>{t.help}</RouterLink>
+          <RouterLink to="/docs" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>Documentation</RouterLink>
+          <a href="https://github.com/tutorzavcedoru9752-cmd/Dash-Navigation" target="_blank" rel="noreferrer" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>GitHub</a>
+          <RouterLink to="/privacy" className={`text-xs uppercase tracking-widest transition-colors ${hasWallpaper ? `${categoryTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-200'}`}>Privacy Policy</RouterLink>
         </div>
       </div>
     </footer>

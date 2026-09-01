@@ -544,7 +544,7 @@ function NavBar() {
   const name = profile?.display_name || getFallbackName(session);
   const avatarUrl = profile?.avatar_url || '';
   const isLifetime = summary.plan === 'lifetime';
-  const planLabel = isLifetime ? accountLabels.lifetime : accountLabels.free;
+  const planBadgeLabel = isLifetime ? 'LIFETIME' : 'FREE';
   const categoryUsage = isLifetime ? '∞' : `${summary.categoryCount}/${FREE_CATEGORY_LIMIT}`;
   const linkUsage = isLifetime ? '∞' : `${summary.linkCount}/${FREE_LINK_LIMIT}`;
   const activeWallpaper = getWallpaperById(wallpaperSettings.wallpaperId);
@@ -554,6 +554,7 @@ function NavBar() {
   const routeHasWallpaperBackground = location.pathname === '/' || location.pathname === '/categories';
   const hasWallpaper = routeHasWallpaperBackground && Boolean(activeWallpaperUrl && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
   const surfaceOpacity = clampCardOpacity(wallpaperSettings.cardOpacity);
+  const topSurfaceOpacity = Math.min(0.9, surfaceOpacity + 0.15);
   const useDarkNavSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightNav === 'dark'));
   const useDarkAccountSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightSurface === 'dark'));
   const navPrimaryClass = useDarkNavSurface ? 'text-white' : 'text-gray-900 dark:text-gray-100';
@@ -563,20 +564,20 @@ function NavBar() {
     : 'text-gray-900 dark:text-gray-100 border-b-2 border-gray-900 dark:border-zinc-100 pb-1';
   const navSurfaceStyle = hasWallpaper
     ? {
-        backgroundColor: useDarkNavSurface ? 'rgba(24, 24, 27, 0.15)' : 'rgba(255, 255, 255, 0.15)',
+        backgroundColor: useDarkNavSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
         backdropFilter: 'blur(14px) saturate(1.2)',
         WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
       }
     : undefined;
   const accountMenuSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
-        backgroundColor: useDarkAccountSurface ? `rgba(24, 24, 27, ${surfaceOpacity})` : `rgba(255, 255, 255, ${surfaceOpacity})`,
-        backdropFilter: 'blur(18px) saturate(1.25)',
-        WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
+        backgroundColor: useDarkAccountSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
+        backdropFilter: 'blur(14px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
       }
     : undefined;
   const accountMenuTextClass = useDarkAccountSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
-  const accountMenuMutedClass = useDarkAccountSurface ? 'text-white/70' : 'text-gray-500 dark:text-gray-400';
+  const accountMenuMutedClass = useDarkAccountSurface ? 'text-white/75' : 'text-gray-700 dark:text-gray-300';
   const accountMenuItemClass = useDarkAccountSurface
     ? 'text-white/85 hover:bg-white/10 focus-visible:ring-white/20'
     : 'text-gray-700 hover:bg-gray-100 focus-visible:ring-gray-300 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600';
@@ -679,7 +680,7 @@ function NavBar() {
               {labels.categories}
             </Link>
           </div>
-          <div ref={accountRef} className={`relative pl-2 sm:pl-4 sm:border-l ${useDarkNavSurface ? 'sm:border-white/10' : 'sm:border-gray-200 dark:sm:border-zinc-800'}`}>
+          <div ref={accountRef} className="relative pl-2 sm:pl-4">
             <button
               type="button"
               onClick={() => setAccountOpen((open) => !open)}
@@ -699,7 +700,7 @@ function NavBar() {
                 type="button"
                 aria-label="Close account menu"
                 onClick={() => setAccountOpen(false)}
-                className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+                className="fixed bottom-0 left-0 right-0 top-[57px] z-40 bg-black/20 backdrop-blur-sm"
               />
               <div
                 style={accountMenuSurfaceStyle}
@@ -727,12 +728,12 @@ function NavBar() {
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">
                       <p className={`truncate text-base font-semibold leading-5 ${accountMenuTextClass}`}>{name}</p>
-                      <span className={`inline-flex h-5 flex-shrink-0 items-center rounded-full px-2.5 text-[10px] font-normal ${
+                      <span className={`inline-flex h-5 flex-shrink-0 items-center rounded-full px-2.5 text-[10px] font-semibold uppercase tracking-wide ${
                         isLifetime
-                          ? 'bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-950'
+                          ? 'border border-amber-300/40 bg-gradient-to-r from-gray-950 via-[#2a2112] to-gray-900 text-amber-200 shadow-sm'
                           : 'bg-gray-200 text-gray-600 dark:bg-zinc-700 dark:text-zinc-300'
                       }`}>
-                        {planLabel}
+                        {planBadgeLabel}
                       </span>
                     </div>
                     <p className={`mt-1 truncate text-xs leading-4 ${accountMenuMutedClass}`}>{email}</p>
@@ -889,11 +890,16 @@ function EditProfileDialog({
     : activeWallpaper?.src;
   const hasWallpaper = Boolean(activeWallpaperUrl && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
   const useDarkSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightSurface === 'dark'));
+  const dialogOpacity = Math.min(0.9, clampCardOpacity(wallpaperSettings.cardOpacity) + 0.15);
+  const panelFillClass = hasWallpaper
+    ? (useDarkSurface ? 'bg-white/10' : 'bg-white/45')
+    : 'bg-gray-100 dark:bg-zinc-800';
+  const subtleTextClass = useDarkSurface ? 'text-white/75' : 'text-gray-700 dark:text-gray-300';
   const dialogSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
-        backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${clampCardOpacity(wallpaperSettings.cardOpacity)})` : `rgba(255, 255, 255, ${clampCardOpacity(wallpaperSettings.cardOpacity)})`,
-        backdropFilter: 'blur(18px) saturate(1.25)',
-        WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
+        backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${dialogOpacity})` : `rgba(255, 255, 255, ${dialogOpacity})`,
+        backdropFilter: 'blur(14px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
       }
     : undefined;
 
@@ -997,7 +1003,7 @@ function EditProfileDialog({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex items-center gap-3 rounded-lg bg-gray-100 p-3 dark:bg-zinc-800">
+          <div className={`flex items-center gap-3 rounded-lg p-3 ${panelFillClass}`}>
             <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-white dark:bg-blue-950">
               {draftAvatar && isLifetime ? (
                 <img src={draftAvatar} alt="" className="h-full w-full object-cover" />
@@ -1007,12 +1013,12 @@ function EditProfileDialog({
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{draftName || name}</p>
-              <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{email}</p>
+              <p className={`mt-0.5 truncate text-xs ${subtleTextClass}`}>{email}</p>
             </div>
           </div>
 
           <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.displayName}</span>
+            <span className={`text-xs font-semibold uppercase tracking-wide ${subtleTextClass}`}>{t.displayName}</span>
             <input
               value={draftName}
               onChange={(event) => setDraftName(event.target.value)}
@@ -1021,7 +1027,7 @@ function EditProfileDialog({
           </label>
 
           <div className="block">
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.avatarUrl}</span>
+            <span className={`text-xs font-semibold uppercase tracking-wide ${subtleTextClass}`}>{t.avatarUrl}</span>
             <input
               ref={avatarInputRef}
               type="file"
@@ -1032,7 +1038,7 @@ function EditProfileDialog({
             <button
               type="button"
               onClick={() => isLifetime ? avatarInputRef.current?.click() : onUpgrade()}
-              className="mt-1.5 flex w-full items-center gap-3 rounded-lg bg-gray-100 p-3 text-left transition hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:focus-visible:ring-zinc-600"
+              className={`mt-1.5 flex w-full items-center gap-3 rounded-lg p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 ${panelFillClass} ${hasWallpaper ? 'hover:bg-white/55 dark:hover:bg-white/15' : 'hover:bg-gray-200 dark:hover:bg-zinc-700'}`}
             >
               <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-gray-600 shadow-sm dark:bg-zinc-900 dark:text-zinc-300">
                 {draftAvatar && isLifetime ? (
@@ -1049,17 +1055,17 @@ function EditProfileDialog({
                 <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                   {uploadingAvatar ? t.uploadingAvatar : t.uploadAvatar}
                 </p>
-                <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
+                <p className={`mt-0.5 truncate text-xs ${subtleTextClass}`}>
                   {isLifetime ? 'JPG / PNG / WebP' : t.avatarLocked}
                 </p>
               </div>
             </button>
             {avatarCropSrc && (
-              <div className="mt-3 rounded-lg bg-gray-100 p-3 dark:bg-zinc-800">
+              <div className={`mt-3 rounded-lg p-3 ${panelFillClass}`}>
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t.cropAvatar}</p>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t.cropHint}</p>
+                    <p className={`mt-0.5 text-xs ${subtleTextClass}`}>{t.cropHint}</p>
                   </div>
                   <button
                     type="button"
@@ -1523,16 +1529,18 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
     : activeWallpaper?.src;
   const hasWallpaper = Boolean(activeWallpaperUrl && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
   const useDarkSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightSurface === 'dark'));
+  const dialogOpacity = Math.min(0.9, clampCardOpacity(wallpaperSettings.cardOpacity) + 0.15);
   const dialogSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
-        backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${clampCardOpacity(wallpaperSettings.cardOpacity)})` : `rgba(255, 255, 255, ${clampCardOpacity(wallpaperSettings.cardOpacity)})`,
-        backdropFilter: 'blur(18px) saturate(1.25)',
-        WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
+        backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${dialogOpacity})` : `rgba(255, 255, 255, ${dialogOpacity})`,
+        backdropFilter: 'blur(14px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
       }
     : undefined;
   const primaryTextClass = useDarkSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
-  const secondaryTextClass = useDarkSurface ? 'text-white/72' : 'text-gray-600 dark:text-gray-400';
-  const fieldSurfaceClass = useDarkSurface ? 'bg-white/10 text-white placeholder:text-white/50' : 'bg-gray-100 text-gray-900 placeholder:text-gray-400 dark:bg-zinc-800 dark:text-gray-100';
+  const secondaryTextClass = useDarkSurface ? 'text-white/75' : 'text-gray-700 dark:text-gray-300';
+  const panelFillClass = hasWallpaper ? (useDarkSurface ? 'bg-white/10' : 'bg-white/45') : 'bg-gray-100 dark:bg-zinc-800';
+  const fieldSurfaceClass = `${panelFillClass} ${useDarkSurface ? 'text-white placeholder:text-white/50' : 'text-gray-900 placeholder:text-gray-500 dark:text-gray-100'}`;
   const benefits = lang === 'zh'
     ? ['无限创建网站分类和收藏', '会员专享壁纸与自定义壁纸功能', '会员专享自定义头像', '终身免费会员']
     : ['Unlimited creation of website categories and collections', 'Member exclusive wallpaper and custom wallpaper function', 'Member exclusive custom avatar', 'Lifetime ad free membership'];
@@ -1583,11 +1591,11 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
           <h2 className={`text-lg font-semibold ${primaryTextClass}`}>{isLifetime ? t.alreadyMember : t.upgradeTitle}</h2>
         </div>
 
-        <div className={`rounded-lg p-4 ${useDarkSurface ? 'bg-white/10' : 'bg-gray-100 dark:bg-zinc-800'}`}>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className={`rounded-lg p-4 ${panelFillClass}`}>
+          <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
             <div className="flex items-center gap-2">
               <p className={`text-3xl font-bold leading-none ${primaryTextClass}`}>{t.upgradePrice}</p>
-              <span className="inline-flex h-5 items-center rounded-full bg-gray-900 px-2 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-zinc-100 dark:text-zinc-950">
+              <span className="inline-flex h-5 items-center rounded-full border border-amber-300/40 bg-gradient-to-r from-gray-950 via-[#2a2112] to-gray-900 px-2 text-[10px] font-semibold uppercase tracking-wide text-amber-200 shadow-sm">
                 {t.lifetime}
               </span>
             </div>
@@ -1596,7 +1604,7 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
                 href={xianyuUrl}
                 target="_blank"
                 rel="noreferrer"
-                className={`inline-flex items-center gap-1.5 text-sm font-medium transition hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 ${secondaryTextClass}`}
+                className="dash-xianyu-link inline-flex items-center gap-1.5 self-end bg-clip-text text-sm font-medium text-transparent underline decoration-current underline-offset-2 transition hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600"
               >
                 {t.buyOnXianyu}
                 <ExternalLink className="h-3.5 w-3.5" />
@@ -1652,7 +1660,7 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
                 disabled={!code.trim() || status === 'submitting'}
                 className="flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus-visible:ring-zinc-600"
               >
-                {status === 'submitting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {status === 'submitting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
                 {status === 'submitting' ? t.redeeming : t.redeemCode}
               </button>
             </div>

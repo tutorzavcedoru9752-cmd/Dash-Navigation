@@ -90,11 +90,19 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
   const activeWallpaperUrl = settings.wallpaperId === CUSTOM_WALLPAPER_ID ? settings.customWallpaperUrl : activeWallpaper?.src;
   const hasWallpaper = Boolean(activeWallpaperUrl && settings.wallpaperId !== DEFAULT_WALLPAPER_ID);
   const useDarkSurface = hasWallpaper && (isDark || (!isDark && activeWallpaper?.appearance?.lightSurface === 'dark'));
+  const dialogOpacity = Math.min(0.9, clampCardOpacity(settings.cardOpacity) + 0.15);
   const dialogSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
-        backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${clampCardOpacity(settings.cardOpacity)})` : `rgba(255, 255, 255, ${clampCardOpacity(settings.cardOpacity)})`,
-        backdropFilter: 'blur(18px) saturate(1.25)',
-        WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
+        backgroundColor: useDarkSurface ? `rgba(24, 24, 27, ${dialogOpacity})` : `rgba(255, 255, 255, ${dialogOpacity})`,
+        backdropFilter: 'blur(14px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+      }
+    : undefined;
+  const customWallpaperSurfaceStyle: CSSProperties | undefined = hasWallpaper && !draftCustomUrl
+    ? {
+        backgroundColor: useDarkSurface ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.30)',
+        backdropFilter: 'blur(8px) saturate(1.12)',
+        WebkitBackdropFilter: 'blur(8px) saturate(1.12)',
       }
     : undefined;
 
@@ -231,7 +239,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
                     ? 'border-gray-900 bg-gray-50 dark:border-zinc-100 dark:bg-zinc-800'
                     : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:bg-zinc-800/60 dark:hover:border-zinc-500 dark:hover:bg-zinc-800'
                 }`}
-                style={draftCustomUrl ? { backgroundImage: `linear-gradient(rgba(0,0,0,.32), rgba(0,0,0,.32)), url(${draftCustomUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                style={draftCustomUrl ? { backgroundImage: `linear-gradient(rgba(0,0,0,.32), rgba(0,0,0,.32)), url(${draftCustomUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : customWallpaperSurfaceStyle}
               >
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm transition group-hover:bg-gray-100 dark:bg-zinc-900 dark:text-zinc-200 dark:group-hover:bg-zinc-700 sm:h-11 sm:w-11">
                   {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : isLifetime ? <Upload className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
@@ -253,9 +261,9 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
             />
           </div>
 
-          <div className="rounded-lg bg-gray-100 p-4 dark:bg-zinc-800">
+          <div className={`rounded-lg p-4 ${hasWallpaper ? (useDarkSurface ? 'bg-white/10' : 'bg-white/45') : 'bg-gray-100 dark:bg-zinc-800'}`}>
             <div className="mb-3 flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{t.opacity}</label>
+              <label className={`text-xs font-semibold uppercase tracking-wide ${useDarkSurface ? 'text-white/75' : 'text-gray-700 dark:text-gray-300'}`}>{t.opacity}</label>
               <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{opacityPercent}%</span>
             </div>
             <input

@@ -297,17 +297,23 @@ export default function Home() {
   const hasWallpaper = Boolean(wallpaperUrl && wallpaperSettings.wallpaperId !== DEFAULT_WALLPAPER_ID);
   const useLightCategoryForeground = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightCategoryForeground === 'light';
   const useLightSideNav = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightSideNav === 'light';
+  const useDarkSideNav = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightSideNav === 'dark';
+  const useLightWeatherForeground = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightWeatherForeground === 'light';
+  const useDarkerMutedForeground = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightMutedForeground === 'dark';
   const useDarkGlassSurface = isDark || (!isDark && builtInWallpaper?.appearance?.lightSurface === 'dark');
   const darkOverlayMode = builtInWallpaper?.appearance?.darkOverlay ?? 'default';
   const showDarkWallpaperOverlay = isDark && darkOverlayMode !== 'none';
   const cardOpacity = clampCardOpacity(wallpaperSettings.cardOpacity);
+  const topSurfaceOpacity = Math.min(0.9, cardOpacity + 0.15);
+  const searchSurfaceOpacity = cardOpacity < 0.5 ? Math.max(0.1, cardOpacity - 0.15) : cardOpacity;
   const categoryWallpaperTextClass = useLightCategoryForeground ? 'text-white drop-shadow-sm' : 'text-gray-950 drop-shadow-sm dark:text-white';
   const wallpaperPrimaryTextClass = useDarkGlassSurface ? 'text-white drop-shadow-sm' : 'text-gray-950 drop-shadow-sm dark:text-white';
-  const wallpaperSecondaryTextClass = useDarkGlassSurface ? 'text-white/75 drop-shadow-sm' : 'text-gray-700 dark:text-zinc-200';
+  const wallpaperSecondaryTextClass = useDarkGlassSurface ? 'text-white/75 drop-shadow-sm' : useDarkerMutedForeground ? 'text-gray-800' : 'text-gray-700 dark:text-zinc-200';
   const wallpaperControlTextClass = useDarkGlassSurface ? 'text-white' : 'text-gray-950 dark:text-white';
+  const weatherTextClass = useLightWeatherForeground ? 'text-white drop-shadow-sm' : hasWallpaper ? 'text-gray-800 drop-shadow-sm dark:text-gray-100' : 'text-gray-700 dark:text-gray-300';
   const siteSearchTextClass = hasWallpaper && useDarkGlassSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
-  const siteSearchMutedTextClass = hasWallpaper && useDarkGlassSurface ? 'text-white/70' : 'text-gray-600 dark:text-gray-400';
-  const siteSearchFaintTextClass = hasWallpaper && useDarkGlassSurface ? 'text-white/55' : 'text-gray-500 dark:text-gray-400';
+  const siteSearchMutedTextClass = hasWallpaper && useDarkGlassSurface ? 'text-white/70' : useDarkerMutedForeground ? 'text-gray-800' : 'text-gray-600 dark:text-gray-400';
+  const siteSearchFaintTextClass = hasWallpaper && useDarkGlassSurface ? 'text-white/55' : useDarkerMutedForeground ? 'text-gray-700' : 'text-gray-500 dark:text-gray-400';
   const siteSearchHoverClass = hasWallpaper
     ? (useDarkGlassSurface ? 'hover:bg-white/10' : 'hover:bg-white/35')
     : 'hover:bg-gray-50 dark:hover:bg-zinc-700';
@@ -316,13 +322,27 @@ export default function Home() {
     ? (isDark ? builtInWallpaper.bannerGradient.dark : builtInWallpaper.bannerGradient.light)
     : sampledWallpaperLook?.gradient;
   const sideNavTone = hasWallpaper
-    ? (sampledWallpaperLook?.sideNavTone ?? (useLightSideNav || isDark ? 'light' : 'dark'))
+    ? (useDarkSideNav ? 'dark' : sampledWallpaperLook?.sideNavTone ?? (useLightSideNav || isDark ? 'light' : 'dark'))
     : 'dark';
   const sideNavTextClass = sideNavTone === 'light' ? 'text-white drop-shadow-sm' : 'text-gray-900';
   const sideNavMarkerClass = sideNavTone === 'light' ? 'bg-white' : 'bg-gray-900';
   const glassSurfaceStyle = hasWallpaper
     ? {
         backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${cardOpacity})` : `rgba(255, 255, 255, ${cardOpacity})`,
+        backdropFilter: 'blur(14px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+      }
+    : undefined;
+  const topGlassSurfaceStyle = hasWallpaper
+    ? {
+        backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
+        backdropFilter: 'blur(14px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+      }
+    : undefined;
+  const searchSurfaceStyle = hasWallpaper
+    ? {
+        backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${searchSurfaceOpacity})` : `rgba(255, 255, 255, ${searchSurfaceOpacity})`,
         backdropFilter: 'blur(14px) saturate(1.2)',
         WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
       }
@@ -730,7 +750,7 @@ export default function Home() {
           />
           {showDarkWallpaperOverlay && (
             <div className={`pointer-events-none fixed inset-0 z-0 transition-colors duration-300 ${
-              darkOverlayMode === 'subtle' ? 'bg-black/25' : 'bg-black/60'
+              darkOverlayMode === 'subtle' ? 'bg-black/8' : 'bg-black/20'
             }`} />
           )}
         </>
@@ -748,9 +768,7 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2, duration: 0.5 }}
-            className={`flex items-center gap-3 mb-4 text-sm font-light ${
-              hasWallpaper ? 'text-gray-800 drop-shadow-sm dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
-            }`}
+            className={`mb-4 flex items-center gap-3 text-sm font-light ${weatherTextClass}`}
           >
             <span>{getCurrentDate()}</span>
             {loadingWeather ? (
@@ -797,7 +815,7 @@ export default function Home() {
                     ? (lang === 'en' ? 'Search with Baidu...' : '百度一下...')
                     : (lang === 'en' ? 'Search with Bing...' : '用必应搜索...')
               }
-              style={glassSurfaceStyle}
+              style={searchSurfaceStyle}
               className={`w-full pl-11 pr-14 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-gray-100/10 focus:border-gray-900 dark:focus:border-gray-400 focus:shadow-md transition-all duration-300 shadow-sm text-base ${
                 hasWallpaper
                   ? `${useDarkGlassSurface ? 'text-white placeholder:text-white/75' : 'text-gray-950 placeholder:text-gray-600'} border-white/55 shadow-lg dark:border-white/10`
@@ -821,7 +839,14 @@ export default function Home() {
                   <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${engineOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {engineOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-28 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg shadow-lg overflow-hidden z-50">
+                  <div
+                    style={topGlassSurfaceStyle}
+                    className={`absolute right-0 top-full z-[80] mt-2 w-28 overflow-hidden rounded-lg border shadow-lg ${
+                      hasWallpaper
+                        ? 'border-white/45 dark:border-white/10'
+                        : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-800'
+                    }`}
+                  >
                     {(['google', 'baidu', 'bing'] as const).map(engine => (
                       <button
                         key={engine}

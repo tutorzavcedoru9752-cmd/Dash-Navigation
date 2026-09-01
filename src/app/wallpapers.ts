@@ -15,8 +15,10 @@ export type WallpaperOption = {
   previewSrc?: string;
   appearance?: {
     darkOverlay?: 'default' | 'subtle' | 'none';
+    lightWeatherForeground?: 'default' | 'light';
     lightCategoryForeground?: 'default' | 'light';
-    lightSideNav?: 'default' | 'light';
+    lightSideNav?: 'default' | 'light' | 'dark';
+    lightMutedForeground?: 'default' | 'dark';
     lightSurface?: 'default' | 'dark';
     lightNav?: 'default' | 'dark';
   };
@@ -34,7 +36,10 @@ export const WALLPAPERS: WallpaperOption[] = [
     access: 'free',
     src: '/wallpapers/free-ocean.jpg',
     appearance: {
-      darkOverlay: 'subtle',
+      darkOverlay: 'none',
+      lightWeatherForeground: 'light',
+      lightSideNav: 'dark',
+      lightMutedForeground: 'dark',
     },
     bannerGradient: {
       light: 'linear-gradient(90deg, rgba(0, 119, 145, 0.78), rgba(18, 55, 78, 0.88))',
@@ -49,7 +54,6 @@ export const WALLPAPERS: WallpaperOption[] = [
     src: '/wallpapers/free-forest.jpg',
     appearance: {
       lightCategoryForeground: 'light',
-      lightSurface: 'dark',
     },
     bannerGradient: {
       light: 'linear-gradient(90deg, rgba(58, 84, 73, 0.78), rgba(150, 167, 151, 0.82))',
@@ -62,6 +66,10 @@ export const WALLPAPERS: WallpaperOption[] = [
     id: 'free-alpine',
     access: 'free',
     src: '/wallpapers/free-alpine.jpg',
+    appearance: {
+      lightSideNav: 'dark',
+      lightMutedForeground: 'dark',
+    },
     bannerGradient: {
       light: 'linear-gradient(90deg, rgba(188, 118, 101, 0.74), rgba(74, 100, 129, 0.82))',
       dark: 'linear-gradient(90deg, rgba(75, 42, 54, 0.84), rgba(37, 55, 82, 0.86))',
@@ -77,7 +85,6 @@ export const WALLPAPERS: WallpaperOption[] = [
       darkOverlay: 'none',
       lightCategoryForeground: 'light',
       lightSideNav: 'light',
-      lightSurface: 'dark',
       lightNav: 'dark',
     },
     bannerGradient: {
