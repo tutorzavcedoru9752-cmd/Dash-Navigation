@@ -149,7 +149,7 @@ function FaviconImage({ src, alt, fallback }: { src?: string; alt: string; fallb
 }
 
 // FAB constants at module level to avoid stale closure issues
-const FAB_SIZE = 44;
+const FAB_SIZE = 45;
 const FAB_MARGIN = 16;
 const COLLAPSED_CATEGORIES_KEY = 'dash-collapsed-categories';
 type SearchEngine = 'google' | 'baidu' | 'bing';
@@ -623,10 +623,8 @@ export default function Home() {
         });
         setLoadingWeather(false);
       } catch (error) {
-        const errorName = error instanceof Error ? error.name : (error as { name?: string } | null)?.name;
-        if (errorName !== 'AbortError') {
-          console.error('Error fetching weather data:', error);
-        }
+        // Weather is optional enrichment; keep the preview usable when an external
+        // provider is unavailable instead of surfacing a recoverable console error.
         setLoadingWeather(false);
       }
     };
@@ -779,8 +777,8 @@ export default function Home() {
                     ? (lang === 'en' ? 'Search with Baidu...' : '百度一下...')
                     : (lang === 'en' ? 'Search with Bing...' : '用必应搜索...')
               }
-              style={{ ...searchSurfaceStyle, ...(hasWallpaper ? { borderWidth: 0.9 } : {}) }}
-              className={`w-full pl-[3.25rem] pr-14 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-gray-100/10 focus:border-gray-900 dark:focus:border-gray-400 focus:shadow-md transition-all duration-300 shadow-sm text-base ${
+              style={{ ...searchSurfaceStyle, ...(hasWallpaper ? { borderWidth: 0.8 } : {}) }}
+              className={`box-border h-12 w-full pl-[3.25rem] pr-14 py-0 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-gray-100/10 focus:border-gray-900 dark:focus:border-gray-400 focus:shadow-md transition-all duration-300 shadow-sm text-base ${
                 hasWallpaper
                   ? `${searchUsesLightText ? 'text-white placeholder:text-white/80' : 'text-gray-950 placeholder:text-gray-700'} border-white/55 shadow-lg dark:border-white/10`
                   : 'bg-white dark:bg-zinc-800 border-gray-300 dark:border-zinc-600 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500'
@@ -833,7 +831,7 @@ export default function Home() {
         </motion.div>
 
         {/* 分类区域 */}
-        <section className="space-y-8">
+        <section className="space-y-[26px]">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-gray-500 dark:text-gray-400">Loading...</div>
@@ -850,17 +848,17 @@ export default function Home() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4 + categoryIndex * 0.1, duration: 0.5, ease: "easeOut" }}
-                  className="space-y-4 scroll-mt-16"
+                  className="space-y-4 scroll-mt-16 md:min-h-[140px]"
                 >
                   <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.5 + categoryIndex * 0.1, duration: 0.4 }}
-                    className={`flex items-center gap-3 border-b pb-2 ${
+                    className={`box-border flex h-[38px] items-center gap-3 border-b pb-1 ${
                       hasWallpaper ? 'border-white/45 dark:border-white/10' : 'border-gray-300 dark:border-zinc-700'
                     }`}
                   >
-                    <div className="-mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1">
+                    <div className="-mx-2 flex h-8 min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-0">
                       <div className={hasWallpaper ? categoryWallpaperTextClass : 'text-gray-900 dark:text-gray-100'}>{categoryIcon}</div>
                       <h2 className={`text-lg font-semibold flex-1 ${hasWallpaper ? categoryWallpaperTextClass : 'text-gray-900 dark:text-gray-100'}`}>{category.title}</h2>
                     </div>

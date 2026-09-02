@@ -97,7 +97,7 @@ export const WALLPAPERS: WallpaperOption[] = [
       light: 'linear-gradient(90deg, rgba(42, 48, 56, 0.84), rgba(126, 132, 138, 0.76))',
       dark: 'linear-gradient(90deg, rgba(17, 24, 39, 0.78), rgba(64, 64, 70, 0.72))',
     },
-    name: { en: 'Monochrome Summit', zh: '会员雪峰' },
+    name: { en: 'Monochrome Summit', zh: '极夜雪峰' },
     description: { en: 'Lifetime wallpaper', zh: '终身会员壁纸' },
   },
 ];

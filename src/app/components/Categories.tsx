@@ -1134,7 +1134,7 @@ export default function Categories() {
                 data-card
                 onClick={() => setActiveCardId(item.id)}
                 style={glassSurfaceStyle}
-                className={`group flex min-h-[136px] cursor-pointer flex-col justify-between rounded-xl border p-3 transition-all duration-200 md:min-h-[164px] md:p-5 ${glassBorderClass} ${glassHoverClass}`}
+                className={`group box-border flex h-[136px] min-h-0 cursor-pointer flex-col justify-between rounded-xl border p-3 transition-all duration-200 md:h-[200px] md:min-h-0 md:p-5 ${glassBorderClass} ${glassHoverClass}`}
               >
                 <div>
                   <div className="flex justify-between items-start mb-2 md:mb-3">
@@ -1200,7 +1200,7 @@ export default function Categories() {
             <button
               onClick={startAddNew}
               style={reducedFillSurfaceStyle ?? glassSurfaceStyle}
-              className={`col-span-2 flex min-h-[136px] flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 transition-all group md:min-h-[164px] lg:col-span-3 ${
+              className={`col-span-2 flex h-[136px] min-h-0 flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 transition-all group md:h-[170px] md:min-h-0 lg:col-span-3 ${
                 hasWallpaper
                   ? `${useDarkGlassSurface ? 'border-white/25 text-white/75 hover:border-white/45 hover:bg-white/10 hover:text-white' : 'border-gray-900/20 text-gray-800 hover:border-gray-900/35 hover:bg-white/40'}`
                   : 'border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:bg-zinc-800'

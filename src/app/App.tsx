@@ -606,12 +606,10 @@ function NavBar() {
   const navSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
         backgroundColor: useDarkNavSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
-        backdropFilter: accountOpen ? 'none' : 'blur(18px) saturate(1.2)',
-        WebkitBackdropFilter: accountOpen ? 'none' : 'blur(18px) saturate(1.2)',
+        backdropFilter: 'blur(18px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
       }
-    : accountOpen
-      ? { backdropFilter: 'none', WebkitBackdropFilter: 'none' }
-      : undefined;
+    : undefined;
   const accountMenuSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
         backgroundColor: useDarkNavSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
@@ -788,6 +786,7 @@ function NavBar() {
                     </div>
                     <p className={`mt-1 truncate text-xs leading-4 ${accountMenuMutedClass}`}>{email}</p>
                   </div>
+                  <Pencil className={`ml-auto h-4 w-4 flex-shrink-0 ${accountMenuIconClass}`} aria-hidden="true" />
                 </button>
                 <div className="space-y-1.5">
                   <button
@@ -1833,12 +1832,12 @@ function PreviewLoginDialog({ action, onClose }: { action: PreviewLoginAction | 
     <div className="dash-scrollbar fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto p-4 py-6 sm:items-center">
       <button type="button" aria-label={copy.close} onClick={onClose} className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
       <section style={dialogSurfaceStyle} role="dialog" aria-modal="true" aria-labelledby="preview-login-title" className={`relative max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border p-5 shadow-2xl dash-scrollbar sm:p-6 ${hasWallpaper ? 'border-white/35 dark:border-white/10' : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'}`}>
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-blue-950"><Lock className="h-4.5 w-4.5" /></div>
-          <div className="min-w-0 flex-1">
-            <h2 id="preview-login-title" className={`text-lg font-semibold ${titleClass}`}>{copy.title}</h2>
-            <p className={`mt-2 text-sm leading-6 ${bodyClass}`}>{copy.body}</p>
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-white dark:bg-blue-950"><Lock className="h-4.5 w-4.5" /></div>
+            <h2 id="preview-login-title" className={`min-w-0 flex-1 text-lg font-semibold ${titleClass}`}>{copy.title}</h2>
           </div>
+          <p className={`ml-[3.25rem] mt-2 text-sm leading-6 ${bodyClass}`}>{copy.body}</p>
         </div>
         <div className="mt-6 flex justify-end gap-3">
           <button type="button" onClick={onClose} className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-medium transition-colors ${useDarkSurface ? 'text-white/85 hover:bg-white/10' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-zinc-700'}`}><X className="h-4 w-4" />{copy.cancel}</button>
