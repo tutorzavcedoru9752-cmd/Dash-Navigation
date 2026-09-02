@@ -152,6 +152,8 @@ function FaviconImage({ src, alt, fallback }: { src?: string; alt: string; fallb
 const FAB_SIZE = 45;
 const FAB_MARGIN = 16;
 const COLLAPSED_CATEGORIES_KEY = 'dash-collapsed-categories';
+const WEATHER_CACHE_KEY = 'dash-weather-cache:v1';
+const WEATHER_CACHE_TTL_MS = 30 * 60 * 1000;
 type SearchEngine = 'google' | 'baidu' | 'bing';
 
 const normalizeSearchEngine = (value: string | null): SearchEngine =>
@@ -163,6 +165,26 @@ interface WeatherData {
   city: string;
   cityEn: string;
 }
+
+type WeatherCacheRecord = {
+  weather: WeatherData;
+  updatedAt: number;
+};
+
+const readWeatherCache = (): WeatherCacheRecord | null => {
+  try {
+    const raw = localStorage.getItem(WEATHER_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as WeatherCacheRecord;
+    return parsed?.weather && Number.isFinite(parsed.updatedAt) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeWeatherCache = (weather: WeatherData) => {
+  try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ weather, updatedAt: Date.now() })); } catch {}
+};
 
 async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 3500): Promise<T> {
   const controller = new AbortController();
@@ -190,8 +212,9 @@ export default function Home() {
   const [showFavicons] = useState(() => {
     try { return sessionStorage.getItem('dash-category-favicons') !== 'hidden'; } catch { return true; }
   });
-  const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [loadingWeather, setLoadingWeather] = useState(true);
+  const initialWeatherCache = useRef(readWeatherCache());
+  const [weather, setWeather] = useState<WeatherData | null>(() => initialWeatherCache.current?.weather ?? null);
+  const [loadingWeather, setLoadingWeather] = useState(() => !initialWeatherCache.current?.weather);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem(COLLAPSED_CATEGORIES_KEY);
@@ -601,6 +624,13 @@ export default function Home() {
   };
 
   useEffect(() => {
+    const cachedWeather = readWeatherCache();
+    if (cachedWeather && Date.now() - cachedWeather.updatedAt < WEATHER_CACHE_TTL_MS) {
+      setWeather(cachedWeather.weather);
+      setLoadingWeather(false);
+      return;
+    }
+
     const fetchWeatherByCoords = async (latitude: number, longitude: number) => {
       try {
         const weatherData = await fetchJsonWithTimeout<{
@@ -615,12 +645,14 @@ export default function Home() {
           getCityName(latitude, longitude, 'en'),
         ]);
 
-        setWeather({
+        const nextWeather = {
           temperature: Math.round(weatherData.current_weather.temperature),
           weatherCode: weatherData.current_weather.weathercode,
           city: cityZh,
           cityEn,
-        });
+        };
+        setWeather(nextWeather);
+        writeWeatherCache(nextWeather);
         setLoadingWeather(false);
       } catch (error) {
         // Weather is optional enrichment; keep the preview usable when an external
@@ -672,7 +704,7 @@ export default function Home() {
           },
           {
             timeout: 5000,
-            maximumAge: 0
+            maximumAge: WEATHER_CACHE_TTL_MS
           }
         );
       } else {

@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useContext } from 'react';
+import { createContext, createElement, useState, useEffect, useCallback, useContext, useRef, type ReactNode } from 'react';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { getPreviewSupabase, supabase } from '../lib/supabase';
 import { getTurnstileToken } from '../lib/turnstile';
 import { PREVIEW_CATEGORIES, PreviewContext } from '../preview';
+import { deleteNavigationCache, NAVIGATION_CACHE_TTL_MS, readNavigationCache, writeNavigationCache } from '../lib/navigationCache';
 
 export interface LinkItem {
   id: string;
@@ -98,9 +99,9 @@ const DEFAULT_SEED_CATEGORY_IDS = ['ai-tools', 'entertainment', 'email'];
 const DEFAULT_SEED_LINK_IDS = ['chat-gpt', 'doubao', 'deepseek', 'xiaohongshu', 'zhihu', 'bilibili', 'qq-mail', '163-mail', 'gmail'];
 
 const getCurrentUserId = async () => {
-  const { data, error } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
-  return data.user?.id ?? null;
+  return data.session?.user.id ?? null;
 };
 
 const createId = () => {
@@ -279,26 +280,64 @@ export const fetchFaviconData = async (url: string): Promise<string> => {
   }
 };
 
-export function useCategories() {
+function useCategoriesState() {
   const { isPreview, requestLogin } = useContext(PreviewContext);
   const [categories, setCategories] = useState<Category[]>(isPreview ? PREVIEW_CATEGORIES : []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const categoriesRef = useRef(categories);
+  const currentUserIdRef = useRef<string | null>(null);
+  const lastSyncAtRef = useRef(0);
 
-  const fetchCategories = useCallback(async () => {
+  useEffect(() => {
+    categoriesRef.current = categories;
+  }, [categories]);
+
+  const replaceCategories = useCallback((nextCategories: Category[], persist = true) => {
+    categoriesRef.current = nextCategories;
+    setCategories(nextCategories);
+    const userId = currentUserIdRef.current;
+    if (persist && userId) {
+      const updatedAt = Date.now();
+      lastSyncAtRef.current = updatedAt;
+      void writeNavigationCache({ userId, categories: nextCategories, updatedAt });
+    }
+  }, []);
+
+  const fetchCategories = useCallback(async (options: { force?: boolean; showLoading?: boolean } = {}) => {
     if (isPreview) {
-      setCategories(PREVIEW_CATEGORIES);
+      const previousUserId = currentUserIdRef.current;
+      if (previousUserId) void deleteNavigationCache(previousUserId);
+      currentUserIdRef.current = null;
+      replaceCategories(PREVIEW_CATEGORIES, false);
       setLoading(false);
       setError(null);
       return;
     }
     try {
-      setLoading(true);
       setError(null);
 
       const userId = await getCurrentUserId();
       if (!userId) {
-        setCategories([]);
+        replaceCategories([], false);
+        setLoading(false);
+        return;
+      }
+
+      currentUserIdRef.current = userId;
+      const cached = await readNavigationCache(userId);
+      const hasMemoryData = categoriesRef.current.length > 0;
+      if (!hasMemoryData && cached?.categories.length) {
+        categoriesRef.current = cached.categories;
+        setCategories(cached.categories);
+        lastSyncAtRef.current = cached.updatedAt;
+        setLoading(false);
+      } else if (options.showLoading !== false && !hasMemoryData) {
+        setLoading(true);
+      }
+
+      if (!options.force && cached && Date.now() - cached.updatedAt < NAVIGATION_CACHE_TTL_MS) {
+        setLoading(false);
         return;
       }
 
@@ -336,13 +375,13 @@ export function useCategories() {
           return;
         }
 
-        setCategories([]);
+        replaceCategories([]);
       } else {
         const nextCategories = (categoryRows ?? []).map((category) =>
           toCategory(category as NavCategoryRow, (linkRows ?? []) as NavLinkRow[])
         );
 
-        setCategories(nextCategories);
+        replaceCategories(nextCategories);
 
         void (async () => {
           const { data: profileRow, error: profileError } = await supabase
@@ -371,7 +410,9 @@ export function useCategories() {
             return;
           }
 
-          await markDefaultsSeeded(userId);
+          if ((profileRow?.default_seed_version ?? 0) < DEFAULT_SEED_VERSION) {
+            await markDefaultsSeeded(userId);
+          }
         })().catch((backgroundError) => {
           console.error('Error checking default navigation seed:', backgroundError);
         });
@@ -382,7 +423,7 @@ export function useCategories() {
     } finally {
       setLoading(false);
     }
-  }, [isPreview]);
+  }, [isPreview, replaceCategories]);
 
   const blockPreviewWrite = () => {
     if (!isPreview) return false;
@@ -392,15 +433,20 @@ export function useCategories() {
 
   const addItem = async (categoryId: string, item: Omit<LinkItem, 'id'>) => {
     if (blockPreviewWrite()) return false;
+    const previousCategories = categoriesRef.current;
+    const linkId = createId();
+    replaceCategories(previousCategories.map((category) => category.id === categoryId
+      ? { ...category, items: [...category.items, { ...item, id: linkId }] }
+      : category));
     try {
       const userId = await getCurrentUserId();
       if (!userId) throw new Error('Please sign in before adding a site.');
 
-      const category = categories.find((cat) => cat.id === categoryId);
+      const category = previousCategories.find((cat) => cat.id === categoryId);
       const nextOrder = category?.items.length ?? 999;
 
       const { error: insertError } = await supabase.rpc('create_nav_link', {
-        p_link_id: createId(),
+        p_link_id: linkId,
         p_category_id: categoryId,
         p_link_name: item.name,
         p_link_url: item.url,
@@ -411,9 +457,9 @@ export function useCategories() {
       });
 
       if (insertError) throw insertError;
-      await fetchCategories();
       return true;
     } catch (err) {
+      replaceCategories(previousCategories);
       console.error('Error adding item:', err);
       setError(quotaErrorMessage(err instanceof Error ? err.message : String(err)));
       return false;
@@ -422,6 +468,20 @@ export function useCategories() {
 
   const updateItem = async (categoryId: string, itemId: string, updatedItem: Partial<LinkItem> & { categoryId?: string }) => {
     if (blockPreviewWrite()) return;
+    const previousCategories = categoriesRef.current;
+    const sourceItem = previousCategories.find((category) => category.id === categoryId)?.items.find((item) => item.id === itemId);
+    if (!sourceItem) return;
+    const targetCategoryId = updatedItem.categoryId ?? categoryId;
+    const { categoryId: _targetCategoryId, ...itemPatch } = updatedItem;
+    const nextItem = { ...sourceItem, ...itemPatch };
+    replaceCategories(previousCategories.map((category) => {
+      const withoutSource = category.id === categoryId
+        ? category.items.filter((item) => item.id !== itemId)
+        : category.items;
+      return category.id === targetCategoryId
+        ? { ...category, items: [...withoutSource, nextItem] }
+        : { ...category, items: withoutSource };
+    }));
     try {
       const patch: Record<string, string | null> = {
         updated_at: new Date().toISOString(),
@@ -441,8 +501,8 @@ export function useCategories() {
         .eq('id', itemId);
 
       if (updateError) throw updateError;
-      await fetchCategories();
     } catch (err) {
+      replaceCategories(previousCategories);
       console.error('Error updating item:', err);
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -450,6 +510,10 @@ export function useCategories() {
 
   const deleteItem = async (categoryId: string, itemId: string) => {
     if (blockPreviewWrite()) return;
+    const previousCategories = categoriesRef.current;
+    replaceCategories(previousCategories.map((category) => category.id === categoryId
+      ? { ...category, items: category.items.filter((item) => item.id !== itemId) }
+      : category));
     try {
       const { error: deleteError } = await supabase
         .from('nav_links')
@@ -458,8 +522,8 @@ export function useCategories() {
         .eq('id', itemId);
 
       if (deleteError) throw deleteError;
-      await fetchCategories();
     } catch (err) {
+      replaceCategories(previousCategories);
       console.error('Error deleting item:', err);
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -467,6 +531,8 @@ export function useCategories() {
 
   const deleteCategory = async (categoryId: string) => {
     if (blockPreviewWrite()) return;
+    const previousCategories = categoriesRef.current;
+    replaceCategories(previousCategories.filter((category) => category.id !== categoryId));
     try {
       const { error: deleteError } = await supabase
         .from('nav_categories')
@@ -474,8 +540,8 @@ export function useCategories() {
         .eq('id', categoryId);
 
       if (deleteError) throw deleteError;
-      await fetchCategories();
     } catch (err) {
+      replaceCategories(previousCategories);
       console.error('Error deleting category:', err);
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -504,10 +570,16 @@ export function useCategories() {
       });
 
       if (upsertError) throw upsertError;
-      await fetchCategories();
 
       const row = Array.isArray(data) ? data[0] : data;
-      return toCategory(row as NavCategoryRow, []);
+      const nextCategory = row
+        ? toCategory(row as NavCategoryRow, [])
+        : { id: categoryData.id, title: categoryData.title, description: categoryData.description, order: categoryData.order_index, items: [] };
+      replaceCategories([
+        ...categoriesRef.current.filter((item) => item.id !== nextCategory.id),
+        nextCategory,
+      ].sort((a, b) => a.order - b.order));
+      return nextCategory;
     } catch (err) {
       console.error('Error saving category:', err);
       setError(quotaErrorMessage(err instanceof Error ? err.message : String(err)));
@@ -721,7 +793,19 @@ export function useCategories() {
       const { error: insertError } = await supabase.rpc('create_nav_links_batch', { p_links: rows });
       if (insertError) throw insertError;
 
-      await fetchCategories();
+      replaceCategories(categoriesRef.current.map((category) => category.id === categoryId
+        ? {
+            ...category,
+            items: [...category.items, ...rows.map((row) => ({
+              id: row.id,
+              name: row.name,
+              url: row.url,
+              description: row.description,
+              icon: row.icon,
+              faviconUrl: row.favicon_url ?? undefined,
+            }))],
+          }
+        : category));
       return true;
     } catch (err) {
       console.error('Error importing shared links:', err);
@@ -745,7 +829,6 @@ export function useCategories() {
         }
       }
 
-      await fetchCategories();
     } catch (err) {
       console.error('Error migrating favicons:', err);
       setError(err instanceof Error ? err.message : String(err));
@@ -753,8 +836,23 @@ export function useCategories() {
   };
 
   useEffect(() => {
-    fetchCategories();
+    void fetchCategories();
   }, [fetchCategories]);
+
+  useEffect(() => {
+    if (isPreview) return;
+    const refreshWhenStale = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastSyncAtRef.current < NAVIGATION_CACHE_TTL_MS) return;
+      void fetchCategories({ force: true, showLoading: false });
+    };
+    document.addEventListener('visibilitychange', refreshWhenStale);
+    window.addEventListener('online', refreshWhenStale);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshWhenStale);
+      window.removeEventListener('online', refreshWhenStale);
+    };
+  }, [fetchCategories, isPreview]);
 
   return {
     categories,
@@ -769,7 +867,22 @@ export function useCategories() {
     getShare,
     deleteShare,
     importSharedLinks,
-    refreshCategories: fetchCategories,
+    refreshCategories: () => fetchCategories({ force: true, showLoading: false }),
     migrateFavicons,
   };
+}
+
+type NavigationDataContextValue = ReturnType<typeof useCategoriesState>;
+
+const NavigationDataContext = createContext<NavigationDataContextValue | null>(null);
+
+export function NavigationDataProvider({ children }: { children: ReactNode }) {
+  const value = useCategoriesState();
+  return createElement(NavigationDataContext.Provider, { value }, children);
+}
+
+export function useCategories() {
+  const value = useContext(NavigationDataContext);
+  if (!value) throw new Error('useCategories must be used inside NavigationDataProvider.');
+  return value;
 }

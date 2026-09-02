@@ -1134,7 +1134,7 @@ export default function Categories() {
                 data-card
                 onClick={() => setActiveCardId(item.id)}
                 style={glassSurfaceStyle}
-                className={`group box-border flex h-[136px] min-h-0 cursor-pointer flex-col justify-between rounded-xl border p-3 transition-all duration-200 md:h-[200px] md:min-h-0 md:p-5 ${glassBorderClass} ${glassHoverClass}`}
+                className={`group box-border flex min-h-[136px] cursor-pointer flex-col justify-between rounded-xl border p-3 transition-all duration-200 md:min-h-[200px] md:p-5 ${glassBorderClass} ${glassHoverClass}`}
               >
                 <div>
                   <div className="flex justify-between items-start mb-2 md:mb-3">
@@ -1165,7 +1165,7 @@ export default function Categories() {
                     </div>
                   </div>
                   <h3 className={`mb-1 truncate text-sm font-semibold md:text-lg ${cardPrimaryTextClass}`} title={item.name}>{item.name}</h3>
-                  <p className={`mb-2 line-clamp-2 text-xs leading-relaxed md:mb-4 md:text-sm ${cardSecondaryTextClass}`} title={item.description}>{item.description}</p>
+                  <p className={`mb-2 break-words text-xs leading-relaxed md:mb-4 md:text-sm ${cardSecondaryTextClass}`} title={item.description}>{item.description}</p>
                 </div>
                 <div className="flex items-center justify-between mt-1 md:mt-2">
                   <span className={`max-w-[70%] truncate rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${

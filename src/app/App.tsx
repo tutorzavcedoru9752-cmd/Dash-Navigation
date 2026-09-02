@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useRef, useEffect, type CSSProperties } from 'react';
+import { createContext, useContext, useState, useRef, useEffect, useLayoutEffect, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useNavigate } from 'react-router';
 import { ArrowLeft, CheckCircle2, ChevronDown, ExternalLink, Gem, Grid2X2, KeyRound, Languages, Loader2, Lock, LogOut, Mail, PanelTop, Pencil, Settings, Sparkles, Sun, Moon, Trash2, Upload, UserRound, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
@@ -7,6 +8,7 @@ import Categories from './components/Categories';
 import WallpaperDialog from './components/WallpaperDialog';
 import { supabase } from './lib/supabase';
 import { getTurnstileToken } from './lib/turnstile';
+import { NavigationDataProvider } from './hooks/useCategories';
 import { PREVIEW_CARD_OPACITY, PREVIEW_LANGUAGE_KEY, PREVIEW_OPACITY_KEY, PREVIEW_THEME_KEY, PREVIEW_WALLPAPER_ID, PREVIEW_WALLPAPER_KEY, PreviewContext, type PreviewLoginAction } from './preview';
 import { CUSTOM_WALLPAPER_ID, DEFAULT_CARD_OPACITY, DEFAULT_WALLPAPER_ID, WALLPAPERS, clampCardOpacity, getWallpaperById } from './wallpapers';
 
@@ -109,6 +111,31 @@ type ProfilePatch = {
 };
 
 const WALLPAPER_CACHE_KEY = 'dash-wallpaper-settings';
+const ACCOUNT_CACHE_PREFIX = 'dash-account-cache:v1:';
+
+type AccountCacheRecord = {
+  profile?: UserProfile;
+  membership?: Omit<MembershipSummary, 'loading'>;
+  updatedAt: number;
+};
+
+const readAccountCache = (userId: string): AccountCacheRecord | null => {
+  try {
+    const raw = localStorage.getItem(`${ACCOUNT_CACHE_PREFIX}${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AccountCacheRecord;
+    return Number.isFinite(parsed.updatedAt) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const updateAccountCache = (userId: string, patch: Partial<AccountCacheRecord>) => {
+  try {
+    const current = readAccountCache(userId) ?? { updatedAt: 0 };
+    localStorage.setItem(`${ACCOUNT_CACHE_PREFIX}${userId}`, JSON.stringify({ ...current, ...patch, updatedAt: Date.now() }));
+  } catch {}
+};
 
 const readPreviewWallpaperSettings = (): WallpaperSettings => {
   try {
@@ -150,7 +177,7 @@ const readCachedWallpaperSettings = (): WallpaperSettings => {
   try {
     const raw = localStorage.getItem(WALLPAPER_CACHE_KEY);
     if (!raw) return DEFAULT_WALLPAPER_SETTINGS;
-    return normalizeWallpaperSettings({ ...JSON.parse(raw), loading: true });
+    return normalizeWallpaperSettings({ ...JSON.parse(raw), loading: false });
   } catch {
     return DEFAULT_WALLPAPER_SETTINGS;
   }
@@ -576,6 +603,9 @@ function NavBar() {
   const [profileStatus, setProfileStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [profileToast, setProfileToast] = useState<{ status: 'saving' | 'done' | 'error'; msg: string } | null>(null);
   const accountRef = useRef<HTMLDivElement>(null);
+  const accountButtonRef = useRef<HTMLButtonElement>(null);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const [accountMenuPosition, setAccountMenuPosition] = useState({ top: 60, left: 12, width: 330 });
   const profileToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isActive = (path: string) => location.pathname === path;
@@ -613,8 +643,8 @@ function NavBar() {
   const accountMenuSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
         backgroundColor: useDarkNavSurface ? `rgba(24, 24, 27, ${topSurfaceOpacity})` : `rgba(255, 255, 255, ${topSurfaceOpacity})`,
-        backdropFilter: 'blur(20px) saturate(1.25)',
-        WebkitBackdropFilter: 'blur(20px) saturate(1.25)',
+        backdropFilter: 'blur(24px) saturate(1.25)',
+        WebkitBackdropFilter: 'blur(24px) saturate(1.25)',
       }
     : undefined;
   const accountMenuTextClass = useDarkAccountSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
@@ -647,13 +677,52 @@ function NavBar() {
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
-      if (accountRef.current && !accountRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        accountRef.current
+        && !accountRef.current.contains(target)
+        && !accountMenuRef.current?.contains(target)
+      ) {
         setAccountOpen(false);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!accountOpen) return;
+
+    const updateAccountMenuPosition = () => {
+      const triggerRect = accountButtonRef.current?.getBoundingClientRect();
+      if (!triggerRect) return;
+
+      const viewportWidth = window.innerWidth;
+      const isNarrow = viewportWidth <= 480;
+      const edgeMargin = isNarrow ? 24 : 12;
+      const width = isNarrow
+        ? Math.max(260, viewportWidth - 64)
+        : Math.min(330, viewportWidth - edgeMargin * 2);
+      const left = Math.min(
+        Math.max(edgeMargin, triggerRect.right - width),
+        viewportWidth - width - edgeMargin,
+      );
+
+      setAccountMenuPosition({
+        top: triggerRect.bottom + 10,
+        left,
+        width,
+      });
+    };
+
+    updateAccountMenuPosition();
+    window.addEventListener('resize', updateAccountMenuPosition);
+    window.addEventListener('scroll', updateAccountMenuPosition, { passive: true });
+    return () => {
+      window.removeEventListener('resize', updateAccountMenuPosition);
+      window.removeEventListener('scroll', updateAccountMenuPosition);
+    };
+  }, [accountOpen]);
 
   useEffect(() => () => {
     if (profileToastTimer.current) clearTimeout(profileToastTimer.current);
@@ -729,10 +798,12 @@ function NavBar() {
           </div>
           <div ref={accountRef} className="relative pl-2 sm:pl-4">
             <button
+              ref={accountButtonRef}
               type="button"
               onClick={() => setAccountOpen((open) => !open)}
               title={email || accountLabels.account}
               aria-label={accountLabels.account}
+              aria-expanded={accountOpen}
               className={`inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-white shadow-sm transition hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 ${avatarUrl ? 'bg-transparent' : 'bg-gray-900 hover:bg-gray-800 dark:bg-blue-950 dark:hover:bg-blue-900'} dark:text-white dark:focus-visible:ring-blue-700`}
             >
               {avatarUrl ? (
@@ -741,17 +812,24 @@ function NavBar() {
                 <UserRound className="h-4 w-4" />
               )}
             </button>
-            {accountOpen && (
+            {accountOpen && createPortal(
               <>
               <button
                 type="button"
                 aria-label="Close account menu"
                 onClick={() => setAccountOpen(false)}
-                className="fixed bottom-0 left-0 right-0 top-[50px] z-40 border-0 bg-transparent"
+                className="fixed bottom-0 left-0 right-0 top-[50px] z-[70] border-0 bg-transparent"
               />
               <div
-                style={accountMenuSurfaceStyle}
-                className={`absolute right-0 top-full z-50 mt-[10px] max-h-[calc(100vh-4.5rem)] w-[330px] max-w-[calc(100vw-1.5rem)] max-[480px]:w-[calc(100vw-4rem)] max-[480px]:max-w-none overflow-y-auto rounded-lg border p-3.5 shadow-xl dash-scrollbar ${
+                ref={accountMenuRef}
+                style={{
+                  ...accountMenuSurfaceStyle,
+                  top: accountMenuPosition.top,
+                  left: accountMenuPosition.left,
+                  width: accountMenuPosition.width,
+                  maxHeight: `calc(100vh - ${accountMenuPosition.top + 12}px)`,
+                }}
+                className={`fixed z-[80] overflow-y-auto rounded-lg border p-3.5 shadow-xl dash-scrollbar ${
                   hasWallpaper
                     ? 'border-white/35 shadow-[0_20px_60px_rgba(15,23,42,0.18)] dark:border-white/10'
                     : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
@@ -764,7 +842,7 @@ function NavBar() {
                     if (isPreview) requestLogin('account');
                     else setEditProfileOpen(true);
                   }}
-                  className={`mb-3 flex w-full items-center gap-3 rounded-lg p-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 ${accountMenuItemClass}`}
+                  className={`mb-3 flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 ${accountMenuItemClass}`}
                 >
                   <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full text-white ${profile?.avatar_url ? 'bg-transparent' : 'bg-gray-900 dark:bg-blue-950'} dark:text-white`}>
                     {avatarUrl ? (
@@ -860,7 +938,7 @@ function NavBar() {
                 </div>
               </div>
               </>
-            )}
+            , document.body)}
           </div>
         </div>
       </div>
@@ -1906,7 +1984,9 @@ export default function App() {
       .maybeSingle();
 
     if (!error && data) {
-      setProfile(data as UserProfile);
+      const nextProfile = data as UserProfile;
+      setProfile(nextProfile);
+      updateAccountCache(nextSession.user.id, { profile: nextProfile });
       return;
     }
 
@@ -1921,7 +2001,9 @@ export default function App() {
       .single();
 
     if (!createError && created) {
-      setProfile(created as UserProfile);
+      const nextProfile = created as UserProfile;
+      setProfile(nextProfile);
+      updateAccountCache(nextSession.user.id, { profile: nextProfile });
     } else {
       console.error('Error ensuring profile:', createError ?? error);
       setProfile({ id: nextSession.user.id, display_name: fallbackName, avatar_url: null });
@@ -1950,7 +2032,9 @@ export default function App() {
       return { error: error.message };
     }
 
-    setProfile(data as UserProfile);
+    const nextProfile = data as UserProfile;
+    setProfile(nextProfile);
+    updateAccountCache(session.user.id, { profile: nextProfile });
     return {};
   };
 
@@ -2002,12 +2086,13 @@ export default function App() {
     }
 
     const row = Array.isArray(data) ? data[0] : data;
-    setMembershipSummary({
+    const nextMembership = {
       plan: isLifetimePlan(row?.plan) ? 'lifetime' : 'free',
       categoryCount: Number(row?.category_count ?? 0),
       linkCount: Number(row?.link_count ?? 0),
-      loading: false,
-    });
+    } satisfies Omit<MembershipSummary, 'loading'>;
+    setMembershipSummary({ ...nextMembership, loading: false });
+    updateAccountCache(targetSession.user.id, { membership: nextMembership });
   };
 
   const redeemMembershipCode = async (code: string) => {
@@ -2180,11 +2265,19 @@ export default function App() {
       }
       if (!passwordRecovery) {
         if (data.session) {
-          await Promise.all([
+          const cachedAccount = readAccountCache(data.session.user.id);
+          if (cachedAccount?.profile) setProfile(cachedAccount.profile);
+          if (cachedAccount?.membership) {
+            setMembershipSummary({ ...cachedAccount.membership, loading: false });
+          }
+          authInitializedRef.current = true;
+          setAuthLoading(false);
+          void Promise.all([
             ensureProfile(data.session),
             refreshMembership(data.session),
             refreshWallpaperSettings(data.session),
           ]);
+          return;
         } else {
           await ensureProfile(null);
         }
@@ -2278,18 +2371,20 @@ export default function App() {
                 <Routes>
                   <Route path="/login" element={session ? <Navigate to="/" replace /> : <AuthScreen notice={authNotice} />} />
                   <Route path="*" element={(
-                    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-zinc-900 flex flex-col transition-colors duration-200">
-                      <NavBar />
-                      <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/categories" element={<Categories />} />
-                        <Route path="/privacy" element={<InfoPage page="privacy" />} />
-                        <Route path="/terms" element={<InfoPage page="terms" />} />
-                        <Route path="/docs" element={<InfoPage page="docs" />} />
-                        <Route path="/help" element={<InfoPage page="help" />} />
-                        <Route path="*" element={<Navigate to="/" replace />} />
-                      </Routes>
-                    </div>
+                    <NavigationDataProvider>
+                      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-zinc-900 flex flex-col transition-colors duration-200">
+                        <NavBar />
+                        <Routes>
+                          <Route path="/" element={<Home />} />
+                          <Route path="/categories" element={<Categories />} />
+                          <Route path="/privacy" element={<InfoPage page="privacy" />} />
+                          <Route path="/terms" element={<InfoPage page="terms" />} />
+                          <Route path="/docs" element={<InfoPage page="docs" />} />
+                          <Route path="/help" element={<InfoPage page="help" />} />
+                          <Route path="*" element={<Navigate to="/" replace />} />
+                        </Routes>
+                      </div>
+                    </NavigationDataProvider>
                   )} />
                 </Routes>
               )}
