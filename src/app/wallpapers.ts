@@ -130,13 +130,11 @@ export const WALLPAPERS: WallpaperOption[] = [
     access: 'lifetime',
     src: '/wallpapers/member-motion-garden.jpg',
     appearance: {
-      darkOverlay: 'subtle',
-      lightCategoryForeground: 'light',
-      lightHomeCategoryForeground: 'light',
-      lightSideNav: 'light',
+      lightSideNav: 'dark',
+      lightMutedForeground: 'dark',
     },
     name: { en: 'Motion Garden', zh: '流光花园' },
-    description: { en: 'Colorful flowers in motion', zh: '流动中的缤纷花影' },
+    description: { en: 'Sunlight rippling across turquoise water', zh: '碧蓝水面上的流动光影' },
   },
   {
     id: 'member-cosmos-field',
