@@ -3,15 +3,22 @@ import type { Category } from '../hooks/useCategories';
 const DATABASE_NAME = 'dash-navigation-cache';
 const DATABASE_VERSION = 1;
 const STORE_NAME = 'navigation';
-const FALLBACK_PREFIX = 'dash-navigation-cache:v1:';
+const CACHE_SCHEMA_VERSION = 2;
+const FALLBACK_PREFIX = `dash-navigation-cache:v${CACHE_SCHEMA_VERSION}:`;
 
 export const NAVIGATION_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type NavigationCacheRecord = {
+  schemaVersion?: number;
   userId: string;
   categories: Category[];
   updatedAt: number;
 };
+
+const isCurrentRecord = (record: NavigationCacheRecord | null | undefined, userId: string) =>
+  record?.schemaVersion === CACHE_SCHEMA_VERSION
+  && record.userId === userId
+  && Array.isArray(record.categories);
 
 const CACHE_OPERATION_TIMEOUT_MS = 800;
 
@@ -58,7 +65,7 @@ const readFallback = (userId: string): NavigationCacheRecord | null => {
     const raw = localStorage.getItem(fallbackKey(userId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as NavigationCacheRecord;
-    return parsed.userId === userId && Array.isArray(parsed.categories) ? parsed : null;
+    return isCurrentRecord(parsed, userId) ? parsed : null;
   } catch {
     return null;
   }
@@ -75,19 +82,20 @@ export const readNavigationCache = async (userId: string): Promise<NavigationCac
       request.onerror = () => reject(request.error);
     });
     database.close();
-    return record && Array.isArray(record.categories) ? record : null;
+    return isCurrentRecord(record, userId) ? record : null;
   } catch {
     return readFallback(userId);
   }
 };
 
 export const writeNavigationCache = async (record: NavigationCacheRecord): Promise<void> => {
+  const currentRecord = { ...record, schemaVersion: CACHE_SCHEMA_VERSION };
   if (typeof indexedDB !== 'undefined') {
     try {
       const database = await openDatabase();
       await new Promise<void>((resolve, reject) => {
         const transaction = database.transaction(STORE_NAME, 'readwrite');
-        transaction.objectStore(STORE_NAME).put(record);
+        transaction.objectStore(STORE_NAME).put(currentRecord);
         transaction.oncomplete = () => resolve();
         transaction.onerror = () => reject(transaction.error);
       });
@@ -99,7 +107,7 @@ export const writeNavigationCache = async (record: NavigationCacheRecord): Promi
     }
   }
 
-  try { localStorage.setItem(fallbackKey(record.userId), JSON.stringify(record)); } catch {}
+  try { localStorage.setItem(fallbackKey(record.userId), JSON.stringify(currentRecord)); } catch {}
 };
 
 export const deleteNavigationCache = async (userId: string): Promise<void> => {

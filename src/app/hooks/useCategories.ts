@@ -557,6 +557,11 @@ function useCategoriesState() {
       const userId = await getCurrentUserId();
       if (!userId) throw new Error('Please sign in before saving a category.');
 
+      // The category RPC only returns the category row. Preserve the websites
+      // already held by the client instead of replacing them with an empty list.
+      const existingCategory = categoriesRef.current.find((item) => item.id === category.id);
+      const existingItems = category.items ?? existingCategory?.items ?? [];
+
       const categoryData = {
         owner_id: userId,
         id: category.id,
@@ -577,8 +582,8 @@ function useCategoriesState() {
 
       const row = Array.isArray(data) ? data[0] : data;
       const nextCategory = row
-        ? toCategory(row as NavCategoryRow, [])
-        : { id: categoryData.id, title: categoryData.title, description: categoryData.description, order: categoryData.order_index, items: [] };
+        ? { ...toCategory(row as NavCategoryRow, []), items: existingItems }
+        : { id: categoryData.id, title: categoryData.title, description: categoryData.description, order: categoryData.order_index, items: existingItems };
       replaceCategories([
         ...categoriesRef.current.filter((item) => item.id !== nextCategory.id),
         nextCategory,
