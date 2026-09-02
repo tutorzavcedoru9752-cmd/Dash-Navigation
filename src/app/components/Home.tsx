@@ -1165,12 +1165,12 @@ export default function Home() {
           ? 'border-transparent bg-transparent'
           : 'border-gray-200 bg-gray-100 dark:border-zinc-800 dark:bg-zinc-900'
       }`}>
-        <div className="max-w-[1200px] mx-auto px-8 py-12 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-          <p className={`text-xs uppercase tracking-widest ${hasWallpaper ? footerWallpaperTextClass : 'text-gray-600 dark:text-gray-400'}`}>© 2024 Minimalist Dash. Designed for focus.</p>
-          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-            <RouterLink to="/docs" className={`text-xs transition-colors uppercase tracking-widest ${hasWallpaper ? `${footerWallpaperTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>Documentation</RouterLink>
-            <a href="https://github.com/tutorzavcedoru9752-cmd/Dash-Navigation" target="_blank" rel="noreferrer" className={`text-xs transition-colors uppercase tracking-widest ${hasWallpaper ? `${footerWallpaperTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>GitHub</a>
-            <RouterLink to="/privacy" className={`text-xs transition-colors uppercase tracking-widest ${hasWallpaper ? `${footerWallpaperTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>Privacy Policy</RouterLink>
+        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-5 px-5 py-8 sm:px-8 sm:py-12 md:flex-row md:gap-8">
+          <p className={`text-center text-xs uppercase leading-5 tracking-widest md:text-left ${hasWallpaper ? footerWallpaperTextClass : 'text-gray-600 dark:text-gray-400'}`}>© 2024 Minimalist Dash. Designed for focus.</p>
+          <div className="grid w-full grid-cols-3 items-center gap-2 text-center sm:flex sm:w-auto sm:flex-wrap sm:justify-center sm:gap-x-8 sm:gap-y-3">
+            <RouterLink to="/docs" className={`whitespace-nowrap text-[10px] uppercase tracking-[0.12em] transition-colors sm:text-xs sm:tracking-widest ${hasWallpaper ? `${footerWallpaperTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>Documentation</RouterLink>
+            <a href="https://github.com/tutorzavcedoru9752-cmd/Dash-Navigation" target="_blank" rel="noreferrer" className={`whitespace-nowrap text-[10px] uppercase tracking-[0.12em] transition-colors sm:text-xs sm:tracking-widest ${hasWallpaper ? `${footerWallpaperTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>GitHub</a>
+            <RouterLink to="/privacy" className={`whitespace-nowrap text-[10px] uppercase tracking-[0.12em] transition-colors sm:text-xs sm:tracking-widest ${hasWallpaper ? `${footerWallpaperTextClass} opacity-80 hover:opacity-100` : 'text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>Privacy Policy</RouterLink>
           </div>
         </div>
       </footer>

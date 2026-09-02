@@ -2,7 +2,6 @@ declare global {
   interface Window {
     turnstile?: {
       render: (container: HTMLElement, options: Record<string, unknown>) => string;
-      execute: (widgetId: string) => void;
       remove: (widgetId: string) => void;
     };
   }
@@ -41,7 +40,7 @@ export const getTurnstileToken = async (action: string): Promise<string | undefi
 
   return new Promise<string>((resolve, reject) => {
     const container = document.createElement('div');
-    container.className = 'fixed bottom-4 right-4 z-[200]';
+    container.className = 'fixed bottom-4 right-4 z-[200] min-h-[65px] min-w-[300px]';
     document.body.appendChild(container);
     let widgetId = '';
     let settled = false;
@@ -59,21 +58,28 @@ export const getTurnstileToken = async (action: string): Promise<string | undefi
     widgetId = window.turnstile!.render(container, {
       sitekey,
       action,
-      execution: 'execute',
+      execution: 'render',
       appearance: 'interaction-only',
       callback: (token: string) => {
         window.clearTimeout(timeout);
         finish(() => resolve(token));
       },
-      'error-callback': () => {
+      'error-callback': (errorCode: string) => {
         window.clearTimeout(timeout);
-        finish(() => reject(new Error('安全验证失败，请重试。')));
+        finish(() => reject(new Error(`安全验证失败，请重试。${errorCode ? ` (${errorCode})` : ''}`)));
       },
       'expired-callback': () => {
         window.clearTimeout(timeout);
         finish(() => reject(new Error('安全验证已过期，请重试。')));
       },
+      'timeout-callback': () => {
+        window.clearTimeout(timeout);
+        finish(() => reject(new Error('安全验证超时，请重试。')));
+      },
+      'unsupported-callback': () => {
+        window.clearTimeout(timeout);
+        finish(() => reject(new Error('当前浏览器不支持安全验证，请更换浏览器后重试。')));
+      },
     });
-    window.turnstile!.execute(widgetId);
   });
 };

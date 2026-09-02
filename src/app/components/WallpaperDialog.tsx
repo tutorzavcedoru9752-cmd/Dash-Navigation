@@ -224,7 +224,28 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
 
         <div className="space-y-5">
           <div>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3">
+            <div className="dash-scrollbar grid h-[170px] auto-rows-max grid-cols-2 gap-2 overflow-y-auto pr-1 sm:h-[270px] sm:gap-3 md:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => isLifetime ? fileInputRef.current?.click() : handleLockedChoice()}
+                className={`group flex aspect-video flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-1.5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 sm:gap-2 sm:px-4 ${
+                  draftWallpaperId === CUSTOM_WALLPAPER_ID
+                    ? 'border-gray-900 bg-gray-50 dark:border-zinc-100 dark:bg-zinc-800'
+                    : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:bg-zinc-800/60 dark:hover:border-zinc-500 dark:hover:bg-zinc-800'
+                }`}
+                style={draftCustomUrl ? { backgroundImage: `linear-gradient(rgba(0,0,0,.32), rgba(0,0,0,.32)), url(${draftCustomUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : customWallpaperSurfaceStyle}
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm transition group-hover:bg-gray-100 dark:bg-zinc-900 dark:text-zinc-200 dark:group-hover:bg-zinc-700 sm:h-11 sm:w-11">
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" /> : isLifetime ? <Upload className="h-4 w-4 sm:h-5 sm:w-5" /> : <Lock className="h-4 w-4 sm:h-5 sm:w-5" />}
+                </span>
+                <span className={`text-[11px] font-semibold sm:text-sm ${draftCustomUrl ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
+                  {t.custom}
+                </span>
+                <span className={`text-[10px] sm:text-xs ${draftCustomUrl ? 'text-white/75' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {isLifetime ? t.upload : t.locked}
+                </span>
+              </button>
+
               {WALLPAPERS.map((wallpaper) => {
                 const locked = wallpaper.access === 'lifetime' && !isLifetime;
                 const selected = draftWallpaperId === wallpaper.id;
@@ -273,26 +294,6 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
                 );
               })}
 
-              <button
-                type="button"
-                onClick={() => isLifetime ? fileInputRef.current?.click() : handleLockedChoice()}
-                className={`group flex aspect-video flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-1.5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600 sm:gap-2 sm:px-4 ${
-                  draftWallpaperId === CUSTOM_WALLPAPER_ID
-                    ? 'border-gray-900 bg-gray-50 dark:border-zinc-100 dark:bg-zinc-800'
-                    : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:bg-zinc-800/60 dark:hover:border-zinc-500 dark:hover:bg-zinc-800'
-                }`}
-                style={draftCustomUrl ? { backgroundImage: `linear-gradient(rgba(0,0,0,.32), rgba(0,0,0,.32)), url(${draftCustomUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : customWallpaperSurfaceStyle}
-              >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm transition group-hover:bg-gray-100 dark:bg-zinc-900 dark:text-zinc-200 dark:group-hover:bg-zinc-700 sm:h-11 sm:w-11">
-                  {uploading ? <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" /> : isLifetime ? <Upload className="h-4 w-4 sm:h-5 sm:w-5" /> : <Lock className="h-4 w-4 sm:h-5 sm:w-5" />}
-                </span>
-                <span className={`text-[11px] font-semibold sm:text-sm ${draftCustomUrl ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
-                  {t.custom}
-                </span>
-                <span className={`text-[10px] sm:text-xs ${draftCustomUrl ? 'text-white/75' : 'text-gray-500 dark:text-gray-400'}`}>
-                  {isLifetime ? t.upload : t.locked}
-                </span>
-              </button>
             </div>
             <input
               ref={fileInputRef}

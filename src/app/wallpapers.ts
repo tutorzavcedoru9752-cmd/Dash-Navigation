@@ -33,6 +33,20 @@ export type WallpaperOption = {
 
 export const WALLPAPERS: WallpaperOption[] = [
   {
+    id: 'free-rose-clouds',
+    access: 'free',
+    src: '/wallpapers/free-rose-clouds.jpg',
+    appearance: {
+      darkOverlay: 'none',
+      lightWeatherForeground: 'light',
+      lightCategoryForeground: 'light',
+      lightHomeCategoryForeground: 'light',
+      lightSideNav: 'light',
+    },
+    name: { en: 'Rose Clouds', zh: '玫瑰星云' },
+    description: { en: 'Pink clouds under a starry sky', zh: '星空下的粉色云层' },
+  },
+  {
     id: 'free-ocean',
     access: 'free',
     src: '/wallpapers/free-ocean.jpg',
@@ -99,6 +113,41 @@ export const WALLPAPERS: WallpaperOption[] = [
     },
     name: { en: 'Monochrome Summit', zh: '极夜雪峰' },
     description: { en: 'Lifetime wallpaper', zh: '终身会员壁纸' },
+  },
+  {
+    id: 'member-green-apples',
+    access: 'lifetime',
+    src: '/wallpapers/member-green-apples.jpg',
+    appearance: {
+      lightSideNav: 'dark',
+      lightMutedForeground: 'dark',
+    },
+    name: { en: 'Green Apple Light', zh: '青苹果日光' },
+    description: { en: 'Fresh green apples in water', zh: '水光中的青苹果' },
+  },
+  {
+    id: 'member-motion-garden',
+    access: 'lifetime',
+    src: '/wallpapers/member-motion-garden.jpg',
+    appearance: {
+      darkOverlay: 'subtle',
+      lightCategoryForeground: 'light',
+      lightHomeCategoryForeground: 'light',
+      lightSideNav: 'light',
+    },
+    name: { en: 'Motion Garden', zh: '流光花园' },
+    description: { en: 'Colorful flowers in motion', zh: '流动中的缤纷花影' },
+  },
+  {
+    id: 'member-cosmos-field',
+    access: 'lifetime',
+    src: '/wallpapers/member-cosmos-field.jpg',
+    appearance: {
+      lightSideNav: 'dark',
+      lightMutedForeground: 'dark',
+    },
+    name: { en: 'Cosmos Field', zh: '晴空花田' },
+    description: { en: 'Soft pink cosmos flowers', zh: '晴空下的粉色波斯菊' },
   },
 ];
 
