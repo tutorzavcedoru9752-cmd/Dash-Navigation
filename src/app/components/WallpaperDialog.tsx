@@ -1,7 +1,8 @@
 import { useContext, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Check, CheckCircle2, Diamond, Image, Loader2, Lock, Upload, X } from 'lucide-react';
-import { LangContext, MembershipContext, ThemeContext, WallpaperContext } from '../App';
+import { AuthContext, LangContext, MembershipContext, ThemeContext, WallpaperContext } from '../App';
 import { PreviewContext } from '../preview';
+import { readUiDraft, removeUiDraft, UI_DRAFT_SCOPES, writeUiDraft } from '../lib/uiDrafts';
 import {
   CUSTOM_WALLPAPER_ID,
   DEFAULT_CARD_OPACITY,
@@ -53,15 +54,26 @@ type WallpaperDialogProps = {
   onClose: () => void;
 };
 
+type WallpaperDialogDraft = {
+  open: true;
+  wallpaperId: string;
+  customWallpaperPath: string | null;
+  customWallpaperUrl: string | null;
+  cardOpacity: number;
+  updatedAt: number;
+};
+
 export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps) {
   const { lang } = useContext(LangContext);
   const { isDark } = useContext(ThemeContext);
   const { summary, openUpgradeDialog } = useContext(MembershipContext);
+  const { session } = useContext(AuthContext);
   const { settings, saveWallpaperSettings, uploadCustomWallpaper } = useContext(WallpaperContext);
   const { isPreview, requestLogin } = useContext(PreviewContext);
   const t = WALLPAPER_LABELS[lang];
   const isLifetime = summary.plan === 'lifetime';
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initializedDraftOwnerRef = useRef<string | null>(null);
   const [draftWallpaperId, setDraftWallpaperId] = useState(settings.wallpaperId);
   const [draftCustomPath, setDraftCustomPath] = useState(settings.customWallpaperPath);
   const [draftCustomUrl, setDraftCustomUrl] = useState(settings.customWallpaperUrl);
@@ -70,17 +82,38 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
   const [status, setStatus] = useState<{ tone: 'success' | 'error' | 'muted'; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+  const draftOwnerId = session?.user.id ?? 'preview';
 
   useEffect(() => {
-    if (!open) return;
-    setDraftWallpaperId(settings.wallpaperId);
-    setDraftCustomPath(settings.customWallpaperPath);
-    setDraftCustomUrl(settings.customWallpaperUrl);
-    setDraftOpacity(settings.cardOpacity);
+    if (!open) {
+      initializedDraftOwnerRef.current = null;
+      setDraftReady(false);
+      return;
+    }
+    if (initializedDraftOwnerRef.current === draftOwnerId) return;
+    initializedDraftOwnerRef.current = draftOwnerId;
+    const savedDraft = readUiDraft<WallpaperDialogDraft>(UI_DRAFT_SCOPES.wallpaperDialog, draftOwnerId);
+    setDraftWallpaperId(savedDraft?.wallpaperId ?? settings.wallpaperId);
+    setDraftCustomPath(savedDraft?.customWallpaperPath ?? settings.customWallpaperPath);
+    setDraftCustomUrl(savedDraft?.customWallpaperUrl ?? settings.customWallpaperUrl);
+    setDraftOpacity(savedDraft?.cardOpacity ?? settings.cardOpacity);
     setStatus(null);
     setSaving(false);
     setUploading(false);
-  }, [open, settings]);
+    setDraftReady(true);
+  }, [draftOwnerId, open, settings.cardOpacity, settings.customWallpaperPath, settings.customWallpaperUrl, settings.wallpaperId]);
+
+  useEffect(() => {
+    if (!open || !draftReady) return;
+    writeUiDraft(UI_DRAFT_SCOPES.wallpaperDialog, draftOwnerId, {
+      open: true as const,
+      wallpaperId: draftWallpaperId,
+      customWallpaperPath: draftCustomPath,
+      customWallpaperUrl: draftCustomUrl,
+      cardOpacity: draftOpacity,
+    });
+  }, [draftCustomPath, draftCustomUrl, draftOpacity, draftOwnerId, draftReady, draftWallpaperId, open]);
 
   if (!open) return null;
 
@@ -108,8 +141,13 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
       }
     : undefined;
 
-  const handleLockedChoice = () => {
+  const handleClose = () => {
+    removeUiDraft(UI_DRAFT_SCOPES.wallpaperDialog, draftOwnerId);
     onClose();
+  };
+
+  const handleLockedChoice = () => {
+    handleClose();
     if (isPreview) requestLogin('membership');
     else openUpgradeDialog();
   };
@@ -159,6 +197,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
       return;
     }
     setStatus({ tone: 'success', message: t.saved });
+    removeUiDraft(UI_DRAFT_SCOPES.wallpaperDialog, draftOwnerId);
     window.setTimeout(onClose, 900);
   };
 
@@ -167,7 +206,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
       <button
         type="button"
         aria-label="Close wallpaper dialog"
-        onClick={onClose}
+        onClick={handleClose}
         className="absolute inset-0 bg-black/45 backdrop-blur-sm"
       />
       <section
@@ -287,7 +326,7 @@ export default function WallpaperDialog({ open, onClose }: WallpaperDialogProps)
           <div className="flex justify-end gap-2.5">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600"
             >
               <X className="h-4 w-4" />

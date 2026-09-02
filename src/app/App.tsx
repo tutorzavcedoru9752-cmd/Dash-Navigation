@@ -9,6 +9,8 @@ import WallpaperDialog from './components/WallpaperDialog';
 import { supabase } from './lib/supabase';
 import { getTurnstileToken } from './lib/turnstile';
 import { NavigationDataProvider } from './hooks/useCategories';
+import { readUiDraft, UI_DRAFT_SCOPES } from './lib/uiDrafts';
+import { shouldUseBlockingAuthLoader } from './lib/authLifecycle';
 import { PREVIEW_CARD_OPACITY, PREVIEW_LANGUAGE_KEY, PREVIEW_OPACITY_KEY, PREVIEW_THEME_KEY, PREVIEW_WALLPAPER_ID, PREVIEW_WALLPAPER_KEY, PreviewContext, type PreviewLoginAction } from './preview';
 import { CUSTOM_WALLPAPER_ID, DEFAULT_CARD_OPACITY, DEFAULT_WALLPAPER_ID, WALLPAPERS, clampCardOpacity, getWallpaperById } from './wallpapers';
 
@@ -607,6 +609,12 @@ function NavBar() {
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [accountMenuPosition, setAccountMenuPosition] = useState({ top: 60, left: 12, width: 330 });
   const profileToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const draftOwnerId = session?.user.id ?? 'preview';
+    const draft = readUiDraft<{ open: boolean; updatedAt: number }>(UI_DRAFT_SCOPES.wallpaperDialog, draftOwnerId);
+    if (draft?.open) setWallpaperOpen(true);
+  }, [isPreview, session?.user.id]);
 
   const isActive = (path: string) => location.pathname === path;
   const labels = NAV_LABELS[lang];
@@ -1948,6 +1956,7 @@ export default function App() {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const authInitializedRef = useRef(false);
+  const sessionRef = useRef<Session | null>(null);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [authNotice, setAuthNotice] = useState('');
   const [previewLoginAction, setPreviewLoginAction] = useState<PreviewLoginAction | null>(null);
@@ -2251,6 +2260,7 @@ export default function App() {
     const initializeAuth = async () => {
       const { data } = await supabase.auth.getSession();
       if (!active) return;
+      sessionRef.current = data.session;
       setSession(data.session);
       if (!data.session) {
         try {
@@ -2292,6 +2302,7 @@ export default function App() {
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true);
+        sessionRef.current = nextSession;
         setSession(nextSession);
         setAuthLoading(false);
         return;
@@ -2312,21 +2323,26 @@ export default function App() {
         setWallpaperSettings(readPreviewWallpaperSettings());
         setMembershipSummary({ plan: 'free', categoryCount: 0, linkCount: 0, loading: false });
         setProfile(null);
+        sessionRef.current = null;
         setSession(null);
         setAuthLoading(false);
         return;
       }
 
+      const previousUserId = sessionRef.current?.user.id ?? null;
+      const nextUserId = nextSession?.user.id ?? null;
+      sessionRef.current = nextSession;
       setSession(nextSession);
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-        setAuthLoading(true);
+        const isFreshSignIn = shouldUseBlockingAuthLoader(event, previousUserId, nextUserId);
+        if (isFreshSignIn) setAuthLoading(true);
         window.setTimeout(() => {
           void Promise.all([
             ensureProfile(nextSession),
             refreshMembership(nextSession),
             refreshWallpaperSettings(nextSession),
           ]).finally(() => {
-            if (active) setAuthLoading(false);
+            if (active && isFreshSignIn) setAuthLoading(false);
           });
         }, 0);
       }

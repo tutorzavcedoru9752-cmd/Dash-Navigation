@@ -7,6 +7,7 @@ import { AuthContext, FREE_CATEGORY_LIMIT, FREE_LINK_LIMIT, LangContext, Members
 import { PreviewContext } from '../preview';
 import { CUSTOM_WALLPAPER_ID, DEFAULT_WALLPAPER_ID, clampCardOpacity, getWallpaperById } from '../wallpapers';
 import { sampleWallpaperContrast, toneForWallpaperLuminance, type WallpaperContrastSample } from '../lib/wallpaperContrast';
+import { readUiDraft, removeUiDraft, UI_DRAFT_SCOPES, writeUiDraft } from '../lib/uiDrafts';
 
 const ui = {
   en: {
@@ -345,6 +346,16 @@ function CategorySelect({
   );
 }
 
+type CategoryEditorDraft = {
+  mode: 'site-add' | 'site-edit' | 'category-create' | 'category-edit';
+  selectedCategoryId: string;
+  formData: { name: string; url: string; description: string; categoryId: string };
+  categoryFormData: { id: string; title: string; description: string };
+  editingItem: { id: string; name: string; url: string; description: string; categoryId: string } | null;
+  editingCategory: { id: string; title: string; description: string } | null;
+  updatedAt: number;
+};
+
 export default function Categories() {
   const { lang } = useContext(LangContext);
   const { isDark } = useContext(ThemeContext);
@@ -380,6 +391,7 @@ export default function Categories() {
   });
   const [toast, setToast] = useState<{ status: 'saving' | 'done' | 'error'; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoredDraftOwnerRef = useRef<string | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [isSharingCategory, setIsSharingCategory] = useState(false);
   const [shareSelectedIds, setShareSelectedIds] = useState<Set<string>>(new Set());
@@ -407,6 +419,10 @@ export default function Categories() {
   const cardOpacity = clampCardOpacity(wallpaperSettings.cardOpacity);
   const topSurfaceOpacity = Math.min(0.9, cardOpacity + 0.15);
   const useDarkerMutedForeground = hasWallpaper && !isDark && builtInWallpaper?.appearance?.lightMutedForeground === 'dark';
+
+  const clearCategoryEditorDraft = () => {
+    if (profile?.id) removeUiDraft(UI_DRAFT_SCOPES.categoryEditor, profile.id);
+  };
   const glassSurfaceStyle: CSSProperties | undefined = hasWallpaper
     ? {
         backgroundColor: useDarkGlassSurface ? `rgba(24, 24, 27, ${cardOpacity})` : `rgba(255, 255, 255, ${cardOpacity})`,
@@ -567,6 +583,78 @@ export default function Categories() {
   }, [categories, selectedCategoryId, importCategoryId]);
 
   useEffect(() => {
+    if (isPreview) {
+      restoredDraftOwnerRef.current = null;
+      setEditingItem(null);
+      setIsAddingNew(false);
+      setIsCreatingCategory(false);
+      setEditingCategory(null);
+      return;
+    }
+
+    const userId = profile?.id;
+    if (!userId || categories.length === 0 || restoredDraftOwnerRef.current === userId) return;
+    restoredDraftOwnerRef.current = userId;
+    const draft = readUiDraft<CategoryEditorDraft>(UI_DRAFT_SCOPES.categoryEditor, userId);
+    if (!draft) return;
+
+    const selectedId = categories.some((category) => category.id === draft.selectedCategoryId)
+      ? draft.selectedCategoryId
+      : categories[0].id;
+    const editingSiteStillExists = draft.editingItem
+      ? categories.some((category) => category.id === draft.editingItem?.categoryId && category.items.some((item) => item.id === draft.editingItem?.id))
+      : false;
+    const editingCategoryStillExists = draft.editingCategory
+      ? categories.some((category) => category.id === draft.editingCategory?.id)
+      : false;
+
+    setSelectedCategoryId(selectedId);
+    if (draft.mode === 'site-add') {
+      setIsAddingNew(true);
+      setEditingItem(null);
+      setFormData(draft.formData);
+    } else if (draft.mode === 'site-edit' && draft.editingItem && editingSiteStillExists) {
+      setEditingItem(draft.editingItem);
+      setIsAddingNew(false);
+      setFormData(draft.formData);
+    } else if (draft.mode === 'category-create') {
+      setIsCreatingCategory(true);
+      setEditingCategory(null);
+      setCategoryFormData(draft.categoryFormData);
+    } else if (draft.mode === 'category-edit' && draft.editingCategory && editingCategoryStillExists) {
+      setEditingCategory(draft.editingCategory);
+      setIsCreatingCategory(false);
+      setCategoryFormData(draft.categoryFormData);
+    } else {
+      removeUiDraft(UI_DRAFT_SCOPES.categoryEditor, userId);
+    }
+  }, [categories, isPreview, profile?.id]);
+
+  useEffect(() => {
+    const userId = profile?.id;
+    if (isPreview || !userId) return;
+    const mode = isAddingNew
+      ? 'site-add'
+      : editingItem
+        ? 'site-edit'
+        : isCreatingCategory
+          ? 'category-create'
+          : editingCategory
+            ? 'category-edit'
+            : null;
+    if (!mode) return;
+
+    writeUiDraft(UI_DRAFT_SCOPES.categoryEditor, userId, {
+      mode,
+      selectedCategoryId,
+      formData,
+      categoryFormData,
+      editingItem,
+      editingCategory,
+    });
+  }, [categoryFormData, editingCategory, editingItem, formData, isAddingNew, isCreatingCategory, isPreview, profile?.id, selectedCategoryId]);
+
+  useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!(e.target as Element).closest('[data-card]')) {
         setActiveCardId(null);
@@ -603,6 +691,7 @@ export default function Categories() {
       if (hasReachedLinkLimit) openUpgradeDialog();
       return;
     }
+    clearCategoryEditorDraft();
     setSelectedCategoryId(targetCategoryId);
     setFormData({ name: '', url: '', description: '', categoryId: targetCategoryId });
     setIsAddingNew(false);
@@ -623,6 +712,7 @@ export default function Categories() {
       faviconUrl,
       categoryId: targetCategoryId,
     });
+    clearCategoryEditorDraft();
     setEditingItem(null);
     setSelectedCategoryId(targetCategoryId);
     setFormData({ name: '', url: '', description: '', categoryId: targetCategoryId });
@@ -670,6 +760,7 @@ export default function Categories() {
   };
 
   const cancelEdit = () => {
+    clearCategoryEditorDraft();
     setEditingItem(null);
     setIsAddingNew(false);
     setFormData({ name: '', url: '', description: '', categoryId: selectedCategoryId });
@@ -687,6 +778,7 @@ export default function Categories() {
     });
 
     if (result) {
+      clearCategoryEditorDraft();
       setCategoryFormData({ id: '', title: '', description: '' });
       setIsCreatingCategory(false);
       setSelectedCategoryId(result.id);
@@ -699,6 +791,7 @@ export default function Categories() {
   };
 
   const cancelCreateCategory = () => {
+    clearCategoryEditorDraft();
     setIsCreatingCategory(false);
     setCategoryFormData({ id: '', title: '', description: '' });
   };
@@ -731,6 +824,7 @@ export default function Categories() {
     });
 
     if (result) {
+      clearCategoryEditorDraft();
       setEditingCategory(null);
       setCategoryFormData({ id: '', title: '', description: '' });
       await refreshMembership();
@@ -739,6 +833,7 @@ export default function Categories() {
   };
 
   const cancelEditCategory = () => {
+    clearCategoryEditorDraft();
     setEditingCategory(null);
     setCategoryFormData({ id: '', title: '', description: '' });
   };
