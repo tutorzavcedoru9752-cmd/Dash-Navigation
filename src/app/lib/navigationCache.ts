@@ -13,16 +13,42 @@ export type NavigationCacheRecord = {
   updatedAt: number;
 };
 
+const CACHE_OPERATION_TIMEOUT_MS = 800;
+
 const openDatabase = () => new Promise<IDBDatabase>((resolve, reject) => {
   const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+  let settled = false;
+  const timeoutId = window.setTimeout(() => {
+    settled = true;
+    reject(new Error('Navigation cache database timed out.'));
+  }, CACHE_OPERATION_TIMEOUT_MS);
   request.onupgradeneeded = () => {
     const database = request.result;
     if (!database.objectStoreNames.contains(STORE_NAME)) {
       database.createObjectStore(STORE_NAME, { keyPath: 'userId' });
     }
   };
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error);
+  request.onsuccess = () => {
+    if (settled) {
+      request.result.close();
+      return;
+    }
+    settled = true;
+    window.clearTimeout(timeoutId);
+    resolve(request.result);
+  };
+  request.onerror = () => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeoutId);
+    reject(request.error);
+  };
+  request.onblocked = () => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeoutId);
+    reject(new Error('Navigation cache database is blocked.'));
+  };
 });
 
 const fallbackKey = (userId: string) => `${FALLBACK_PREFIX}${userId}`;

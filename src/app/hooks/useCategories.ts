@@ -99,9 +99,9 @@ const DEFAULT_SEED_CATEGORY_IDS = ['ai-tools', 'entertainment', 'email'];
 const DEFAULT_SEED_LINK_IDS = ['chat-gpt', 'doubao', 'deepseek', 'xiaohongshu', 'zhihu', 'bilibili', 'qq-mail', '163-mail', 'gmail'];
 
 const getCurrentUserId = async () => {
-  const { data, error } = await supabase.auth.getSession();
+  const { data, error } = await supabase.auth.getUser();
   if (error) throw error;
-  return data.session?.user.id ?? null;
+  return data.user?.id ?? null;
 };
 
 const createId = () => {
