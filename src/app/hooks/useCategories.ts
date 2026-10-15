@@ -22,6 +22,8 @@ export interface Category {
   order?: number;
 }
 
+export type LinkImportGroup = { categoryId: string; links: LinkItem[] };
+
 export interface NavShare {
   code: string;
   categoryTitle: string;
@@ -779,40 +781,43 @@ function useCategoriesState() {
     }
   };
 
-  const importSharedLinks = async (categoryId: string, links: LinkItem[]) => {
+  const importLinkGroups = async (groups: LinkImportGroup[]) => {
     if (blockPreviewWrite()) return false;
     try {
       const userId = await getCurrentUserId();
       if (!userId) throw new Error('Please sign in before importing links.');
-      if (!categoryId || links.length === 0) return false;
-
-      const targetCategory = categories.find((category) => category.id === categoryId);
-      const startOrder = targetCategory?.items.length ?? 0;
-      const rows = links.map((item, index) => ({
-        id: createId(),
-        category_id: categoryId,
-        name: item.name,
-        url: item.url,
-        description: item.description,
-        icon: item.icon || 'link',
-        favicon_url: item.faviconUrl || null,
-        order_index: startOrder + index,
+      const snapshot = categoriesRef.current;
+      const orders = new Map(snapshot.map(category => [category.id, category.items.length]));
+      const rows = groups.flatMap(({categoryId, links}) => links.map((item) => {
+        if (!orders.has(categoryId)) throw new Error('The target category no longer exists.');
+        const nextOrder = orders.get(categoryId)!;
+        orders.set(categoryId, nextOrder + 1);
+        return {
+          id: createId(),
+          category_id: categoryId,
+          name: item.name,
+          url: item.url,
+          description: item.description,
+          icon: item.icon || 'link',
+          favicon_url: item.faviconUrl || null,
+          order_index: nextOrder,
+        };
       }));
+      if (rows.length === 0) return false;
 
       const { error: insertError } = await supabase.rpc('create_nav_links_batch', { p_links: rows });
       if (insertError) throw insertError;
 
-      replaceCategories(categoriesRef.current.map((category) => category.id === categoryId
+      const addedByCategory = new Map<string, LinkItem[]>();
+      for (const row of rows) {
+        const added = addedByCategory.get(row.category_id) ?? [];
+        added.push({ id: row.id, name: row.name, url: row.url, description: row.description, icon: row.icon, faviconUrl: row.favicon_url ?? undefined });
+        addedByCategory.set(row.category_id, added);
+      }
+      replaceCategories(categoriesRef.current.map((category) => addedByCategory.has(category.id)
         ? {
             ...category,
-            items: [...category.items, ...rows.map((row) => ({
-              id: row.id,
-              name: row.name,
-              url: row.url,
-              description: row.description,
-              icon: row.icon,
-              faviconUrl: row.favicon_url ?? undefined,
-            }))],
+            items: [...category.items, ...addedByCategory.get(category.id)!],
           }
         : category));
       return true;
@@ -822,6 +827,8 @@ function useCategoriesState() {
       return false;
     }
   };
+
+  const importSharedLinks = (categoryId: string, links: LinkItem[]) => importLinkGroups([{categoryId, links}]);
 
   const migrateFavicons = async () => {
     if (blockPreviewWrite()) return;
@@ -876,6 +883,7 @@ function useCategoriesState() {
     getShare,
     deleteShare,
     importSharedLinks,
+    importLinkGroups,
     refreshCategories: () => fetchCategories({ force: true, showLoading: false }),
     migrateFavicons,
   };

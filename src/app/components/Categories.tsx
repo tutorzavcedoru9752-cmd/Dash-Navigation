@@ -8,6 +8,7 @@ import { PreviewContext } from '../preview';
 import { CUSTOM_WALLPAPER_ID, DEFAULT_WALLPAPER_ID, clampCardOpacity, getWallpaperById } from '../wallpapers';
 import { sampleWallpaperContrast, toneForWallpaperLuminance, type WallpaperContrastSample } from '../lib/wallpaperContrast';
 import { readUiDraft, removeUiDraft, UI_DRAFT_SCOPES, writeUiDraft } from '../lib/uiDrafts';
+import LinkImportDialog from './LinkImportDialog';
 
 const ui = {
   en: {
@@ -398,6 +399,7 @@ export default function Categories() {
   const [shareResult, setShareResult] = useState<{ code: string; expiresAt: string; sharerName: string; sharerAvatarUrl?: string } | null>(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [isImportingShare, setIsImportingShare] = useState(false);
+  const [isChoosingImport, setIsChoosingImport] = useState(false);
   const [importCode, setImportCode] = useState('');
   const [loadedShare, setLoadedShare] = useState<NavShare | null>(null);
   const [importSelectedIds, setImportSelectedIds] = useState<Set<string>>(new Set());
@@ -1160,7 +1162,7 @@ export default function Categories() {
                 <span className="truncate">{showFavicons ? t.hideIcons : t.showIcons}</span>
               </button>
               <button
-                onClick={openImportModal}
+                onClick={() => setIsChoosingImport(true)}
                 className={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-all md:w-full md:gap-2 md:px-4 md:text-sm ${
                   hasWallpaper ? `${useDarkGlassSurface ? 'bg-white/10 text-white/75 hover:bg-white/15 hover:text-white' : 'bg-white/45 text-gray-800 hover:bg-white/60'}` : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600'
                 }`}
@@ -1665,6 +1667,20 @@ export default function Categories() {
         </motion.div>
       </div>
     )}
+
+    {isChoosingImport && <LinkImportDialog
+      defaultCategoryId={selectedCategoryId || categories[0]?.id || ''}
+      surfaceStyle={topGlassSurfaceStyle}
+      surfaceClass={modalSurfaceClass}
+      fieldClass={formFieldClass}
+      labelClass={modalLabelClass}
+      itemClass={modalItemClass}
+      primaryClass={primaryButtonClass}
+      darkSurface={useDarkGlassSurface}
+      onClose={() => setIsChoosingImport(false)}
+      onShare={() => { setIsChoosingImport(false); openImportModal(); }}
+      onImported={(categoryId, count) => { setSelectedCategoryId(categoryId); setIsChoosingImport(false); finishToast(lang === 'zh' ? `已导入 ${count} 个网址` : `${count} sites imported`); }}
+    />}
 
     {/* Import Shared Links Modal */}
     {isImportingShare && (
