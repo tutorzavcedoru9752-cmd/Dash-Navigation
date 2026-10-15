@@ -3,11 +3,6 @@
 
 @import 'tw-animate-css';
 
-@keyframes dash-xianyu-whole {
-  0%, 100% { color: #111827; opacity: 1; }
-  50% { color: #6b7280; opacity: 0.72; }
-}
-
 @keyframes dash-lifetime-shimmer {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -29,20 +24,6 @@
 @media (prefers-reduced-motion: reduce) {
   .dash-lifetime-badge { animation: none; }
   .dash-success-feedback, .dash-success-button { animation: none; }
-  .dash-xianyu-link { animation: none; }
-}
-
-.dash-xianyu-link {
-  color: #111827;
-  animation: dash-xianyu-whole 4s ease-in-out infinite;
-}
-
-.dash-xianyu-link svg {
-  color: currentColor;
-}
-
-.dark .dash-xianyu-link {
-  color: #f4f4f5;
 }
 
 .dash-scrollbar {

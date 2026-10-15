@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect, useLayoutEffect, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useNavigate } from 'react-router';
-import { ArrowLeft, CheckCircle2, ChevronDown, ExternalLink, Gem, Grid2X2, KeyRound, Languages, Loader2, Lock, LogOut, Mail, PanelTop, Pencil, Settings, Sparkles, Sun, Moon, Trash2, Upload, UserRound, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ChevronDown, Gem, Grid2X2, KeyRound, Languages, Loader2, Lock, LogOut, Mail, PanelTop, Pencil, Settings, Sparkles, Sun, Moon, Trash2, Upload, UserRound, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import Home from './components/Home';
 import Categories from './components/Categories';
@@ -199,7 +199,6 @@ const cacheWallpaperSettings = (settings: WallpaperSettings) => {
 const isBuiltInLifetimeWallpaper = (wallpaperId: string) =>
   WALLPAPERS.some((wallpaper) => wallpaper.id === wallpaperId && wallpaper.access === 'lifetime');
 
-const XIANYU_MEMBERSHIP_URL = 'https://m.tb.cn/h.8NvRUGx?tk=RHkETf2uFdQ';
 
 // ─── Nav labels ───────────────────────────────────────────────────────────────
 
@@ -240,9 +239,6 @@ const ACCOUNT_LABELS = {
     signOut: 'Sign out',
     profileError: 'Could not save profile. Please try again.',
     upgradeTitle: 'Lifetime membership',
-    upgradePrice: '¥5.99',
-    upgradeSubtitle: 'Unlimited categories and sites. Custom avatar and wallpaper are reserved for the next release.',
-    buyOnXianyu: 'Buy on Xianyu',
     redeemCode: 'Verify membership code',
     codePlaceholder: 'JF-XXXX-XXXX-XXXX',
     redeeming: 'Verifying...',
@@ -280,9 +276,6 @@ const ACCOUNT_LABELS = {
     signOut: '退出账号',
     profileError: '资料保存失败，请重试。',
     upgradeTitle: '升级终身会员',
-    upgradePrice: '¥5.99',
-    upgradeSubtitle: '不限分类、不限网站数量。自定义头像和壁纸会在后续版本开放。',
-    buyOnXianyu: '去闲鱼购买',
     redeemCode: '核验会员码',
     codePlaceholder: 'JF-XXXX-XXXX-XXXX',
     redeeming: '核验中...',
@@ -427,14 +420,14 @@ const INFO_PAGES: Record<InfoPageKey, Record<Lang, { title: string; body: string
       title: 'Help Center',
       body: [
         'If a link icon looks wrong, use Refresh Icons on the Categories page. If a membership code cannot be verified, check the code format and try again.',
-        'For purchase questions, open the Lifetime membership card and use the Xianyu purchase link.',
+        'Open Upgrade in the account menu to enter and verify your membership code.',
       ],
     },
     zh: {
       title: '帮助中心',
       body: [
         '如果网站图标显示异常，可以在分类页使用“刷新图标”。如果会员码无法核验，请先检查格式再重试。',
-        '购买相关问题可以打开终身会员卡片，通过闲鱼购买入口继续处理。',
+        '在账号菜单中打开“升级会员”，输入会员码并核验即可。',
       ],
     },
   },
@@ -1707,7 +1700,6 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
-  const xianyuUrl = XIANYU_MEMBERSHIP_URL;
   const isLifetime = summary.plan === 'lifetime';
   const activeWallpaper = getWallpaperById(wallpaperSettings.wallpaperId);
   const activeWallpaperUrl = wallpaperSettings.wallpaperId === CUSTOM_WALLPAPER_ID
@@ -1724,12 +1716,8 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
       }
     : undefined;
   const primaryTextClass = useDarkSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
-  const secondaryTextClass = useDarkSurface ? 'text-white/75' : 'text-gray-700 dark:text-gray-300';
   const panelFillClass = hasWallpaper ? (useDarkSurface ? 'bg-white/10' : 'bg-white/45') : 'bg-gray-100 dark:bg-zinc-800';
   const fieldSurfaceClass = `${panelFillClass} ${useDarkSurface ? 'text-white placeholder:text-white/50' : 'text-gray-900 placeholder:text-gray-500 dark:text-gray-100'}`;
-  const benefits = lang === 'zh'
-    ? ['无限创建网站分类和收藏', '会员专享壁纸与自定义壁纸功能', '会员专享自定义头像', '终身免费会员']
-    : ['Unlimited creation of website categories and collections', 'Member exclusive wallpaper and custom wallpaper function', 'Member exclusive custom avatar', 'Lifetime ad free membership'];
 
   useEffect(() => {
     if (open) {
@@ -1761,6 +1749,9 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
         className="absolute inset-0 bg-black/45 backdrop-blur-sm"
       />
       <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="membership-dialog-title"
         style={dialogSurfaceStyle}
         className={`relative w-full max-w-md rounded-xl border p-6 shadow-2xl ${
           hasWallpaper
@@ -1774,42 +1765,16 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
           ) : (
             <Gem className={`h-5 w-5 ${primaryTextClass}`} />
           )}
-          <h2 className={`text-lg font-semibold ${primaryTextClass}`}>{isLifetime ? t.alreadyMember : t.upgradeTitle}</h2>
+          <h2 id="membership-dialog-title" className={`text-lg font-semibold ${primaryTextClass}`}>{isLifetime ? t.alreadyMember : t.upgradeTitle}</h2>
         </div>
 
-        <div className={`rounded-lg p-4 ${panelFillClass}`}>
-            <div className="flex items-end justify-between gap-x-4 gap-y-2">
-            <div className="flex items-center gap-2">
-              <p className={`text-3xl font-bold leading-none ${primaryTextClass}`}>{t.upgradePrice}</p>
-              <span className="inline-flex h-5 items-center rounded-full border border-gray-950 bg-gray-950 px-2 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm">
-                {t.lifetime}
-              </span>
-            </div>
-            {!isLifetime && (
-              <a
-                href={xianyuUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="dash-xianyu-link ml-auto inline-flex items-center gap-1.5 text-sm font-medium underline decoration-current underline-offset-2 transition hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600"
-              >
-                {t.buyOnXianyu}
-                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-gray-900 dark:text-white" />
-              </a>
-            )}
-          </div>
-          <ul className={`mt-3 list-disc space-y-0.5 pl-4 text-xs leading-4 ${secondaryTextClass}`}>
-            {benefits.map((benefit) => (
-              <li key={benefit}>{benefit}</li>
-            ))}
-          </ul>
-        </div>
-
-        <form onSubmit={handleRedeem} className="mt-4 space-y-3">
+        <form onSubmit={handleRedeem} className="space-y-3">
           <label className="block">
             <span className={`text-sm font-semibold ${useDarkSurface ? 'text-white/85' : 'text-gray-700 dark:text-gray-200'}`}>{t.redeemCode}</span>
             <span className={`mt-2 flex h-11 items-center gap-2 rounded-lg px-3 ring-1 ring-transparent transition focus-within:ring-2 focus-within:ring-gray-300 dark:focus-within:ring-zinc-600 ${fieldSurfaceClass}`}>
               <KeyRound className="h-4 w-4 flex-shrink-0 opacity-45" />
               <input
+                autoFocus={!isLifetime}
                 value={code}
                 onChange={(event) => setCode(formatMembershipCodeInput(event.target.value))}
                 placeholder={t.codePlaceholder}
@@ -1819,7 +1784,7 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
             </span>
           </label>
           {message && (
-            <p className={`rounded-lg px-3 py-2 text-sm ${status === 'success' ? 'dash-success-feedback' : ''} ${
+            <p role="status" aria-live="polite" className={`rounded-lg px-3 py-2 text-sm ${status === 'success' ? 'dash-success-feedback' : ''} ${
               status === 'success'
                 ? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300'
                 : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
