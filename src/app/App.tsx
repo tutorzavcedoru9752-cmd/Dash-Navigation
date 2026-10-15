@@ -1715,9 +1715,13 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
         WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
       }
     : undefined;
-  const primaryTextClass = useDarkSurface ? 'text-white' : 'text-gray-950 dark:text-gray-100';
-  const panelFillClass = hasWallpaper ? (useDarkSurface ? 'bg-white/10' : 'bg-white/45') : 'bg-gray-100 dark:bg-zinc-800';
-  const fieldSurfaceClass = `${panelFillClass} ${useDarkSurface ? 'text-white placeholder:text-white/50' : 'text-gray-900 placeholder:text-gray-500 dark:text-gray-100'}`;
+  const primaryTextClass = useDarkSurface ? 'text-white' : 'text-gray-900 dark:text-gray-100';
+  const fieldSurfaceClass = hasWallpaper
+    ? `${useDarkSurface ? 'bg-white/10 text-white placeholder:text-white/55 focus-visible:ring-white/30' : 'bg-white/55 text-gray-900 placeholder:text-gray-600 focus-visible:ring-gray-400/70'} border border-white/35 shadow-sm`
+    : 'bg-gray-100 dark:bg-zinc-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus-visible:ring-gray-300 dark:focus-visible:ring-zinc-600';
+  const fieldLabelClass = hasWallpaper
+    ? useDarkSurface ? 'text-white/80' : 'text-gray-700'
+    : 'text-gray-700 dark:text-gray-300';
 
   useEffect(() => {
     if (open) {
@@ -1746,20 +1750,20 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
         type="button"
         aria-label="Close membership dialog"
         onClick={onClose}
-        className="absolute inset-0 bg-black/45 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
       />
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="membership-dialog-title"
         style={dialogSurfaceStyle}
-        className={`relative w-full max-w-md rounded-xl border p-6 shadow-2xl ${
+        className={`dash-scrollbar relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-2xl ${
           hasWallpaper
             ? 'border-white/35 dark:border-white/10'
-            : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
+            : 'border-gray-200 bg-white dark:border-zinc-700 dark:bg-zinc-800'
         }`}
       >
-        <div className="mb-5 flex items-center gap-3">
+        <div className="mb-6 flex items-center gap-2">
           {status === 'success' ? (
             <Sparkles className={`h-5 w-5 ${primaryTextClass}`} />
           ) : (
@@ -1768,20 +1772,20 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
           <h2 id="membership-dialog-title" className={`text-lg font-semibold ${primaryTextClass}`}>{isLifetime ? t.alreadyMember : t.upgradeTitle}</h2>
         </div>
 
-        <form onSubmit={handleRedeem} className="space-y-3">
-          <label className="block">
-            <span className={`text-sm font-semibold ${useDarkSurface ? 'text-white/85' : 'text-gray-700 dark:text-gray-200'}`}>{t.redeemCode}</span>
-            <span className={`mt-2 flex h-11 items-center gap-2 rounded-lg px-3 ring-1 ring-transparent transition focus-within:ring-2 focus-within:ring-gray-300 dark:focus-within:ring-zinc-600 ${fieldSurfaceClass}`}>
-              <KeyRound className="h-4 w-4 flex-shrink-0 opacity-45" />
-              <input
-                autoFocus={!isLifetime}
-                value={code}
-                onChange={(event) => setCode(formatMembershipCodeInput(event.target.value))}
-                placeholder={t.codePlaceholder}
-                disabled={status === 'submitting' || isLifetime}
-                className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase tracking-wider outline-none placeholder:font-sans placeholder:tracking-normal disabled:opacity-60"
-              />
-            </span>
+        <form onSubmit={handleRedeem} className="space-y-4">
+          <label className="block space-y-1.5">
+            <span className={`block px-1 text-xs font-semibold uppercase tracking-wide ${fieldLabelClass}`}>{t.redeemCode}</span>
+            <input
+              autoFocus={!isLifetime}
+              value={code}
+              onChange={(event) => setCode(formatMembershipCodeInput(event.target.value))}
+              placeholder={t.codePlaceholder}
+              disabled={status === 'submitting' || isLifetime}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              className={`${fieldSurfaceClass} w-full rounded-lg p-3 font-sans text-base font-normal tracking-normal outline-none transition-all focus-visible:ring-2 disabled:opacity-60`}
+            />
           </label>
           {message && (
             <p role="status" aria-live="polite" className={`rounded-lg px-3 py-2 text-sm ${status === 'success' ? 'dash-success-feedback' : ''} ${
@@ -1793,14 +1797,14 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
             </p>
           )}
           {!isLifetime && (
-            <div className="flex items-center justify-end gap-3 pt-1">
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-4">
               <button
                 type="button"
                 onClick={onClose}
-                className={`flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 ${
+                className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-6 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 sm:flex-initial ${
                   useDarkSurface
                     ? 'text-white/75 hover:bg-white/10 focus-visible:ring-white/20'
-                    : 'text-gray-700 hover:bg-gray-100 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:bg-zinc-800 dark:focus-visible:ring-zinc-600'
+                    : 'text-gray-700 hover:bg-gray-100 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:bg-zinc-700 dark:focus-visible:ring-zinc-600'
                 }`}
               >
                 <X className="h-4 w-4" />
@@ -1809,7 +1813,7 @@ function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }
               <button
                 type="submit"
                 disabled={!code.trim() || status === 'submitting'}
-                className={`flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus-visible:ring-zinc-600 ${status === 'success' ? 'dash-success-button' : ''}`}
+                className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gray-900 px-6 py-2 text-sm font-medium text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700 sm:flex-initial ${status === 'success' ? 'dash-success-button' : ''}`}
               >
                 {status === 'submitting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
                 {status === 'submitting' ? t.redeeming : t.redeemCode}
