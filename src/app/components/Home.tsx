@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { Link as RouterLink } from 'react-router';
 import { Search, Sun, BookOpen, Sparkles, PlayCircle, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Cloud, CloudRain, CloudSnow, Wind, Link, Code, Terminal, Database, Settings, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, ChevronDown, ChevronUp, X, MapPin, ExternalLink, Mail } from 'lucide-react';
 import { useCategories } from '../hooks/useCategories';
+import { NavigationSkeleton } from './NavigationSkeleton';
 import { LangContext, ThemeContext, WallpaperContext } from '../App';
 import { motion } from 'motion/react';
 import { CUSTOM_WALLPAPER_ID, DEFAULT_WALLPAPER_ID, clampCardOpacity, getWallpaperById } from '../wallpapers';
@@ -865,9 +866,7 @@ export default function Home() {
         {/* 分类区域 */}
         <section className="space-y-[26px]">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500 dark:text-gray-400">Loading...</div>
-            </div>
+            <NavigationSkeleton label={lang === 'zh' ? '正在加载网址…' : 'Loading sites…'} />
           ) : (
             categories.map((category, categoryIndex) => {
               const colors = categoryColorMap[category.title] || { bgColor: 'bg-gray-100', textColor: 'text-gray-900' };

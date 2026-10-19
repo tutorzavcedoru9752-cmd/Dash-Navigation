@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, useRef, type CSSProperties } from 'react';
 import { Link as RouterLink } from 'react-router';
-import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, Eye, EyeOff, Mail, Share2, Download, Check, KeyRound, Clock3, UserRound, RefreshCw } from 'lucide-react';
+import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, Eye, EyeOff, Mail, Share2, Download, Check, KeyRound, Clock3, UserRound, RefreshCw } from 'lucide-react';
 import { fetchFaviconData, useCategories, type LinkItem, type NavShare } from '../hooks/useCategories';
 import { motion } from 'motion/react';
 import { AuthContext, FREE_CATEGORY_LIMIT, FREE_LINK_LIMIT, LangContext, MembershipContext, ThemeContext, WallpaperContext } from '../App';
@@ -9,6 +9,8 @@ import { CUSTOM_WALLPAPER_ID, DEFAULT_WALLPAPER_ID, clampCardOpacity, getWallpap
 import { sampleWallpaperContrast, toneForWallpaperLuminance, type WallpaperContrastSample } from '../lib/wallpaperContrast';
 import { readUiDraft, removeUiDraft, UI_DRAFT_SCOPES, writeUiDraft } from '../lib/uiDrafts';
 import LinkImportDialog from './LinkImportDialog';
+import { MAX_BOOKMARK_IMPORT, bookmarkUrlKey, type BrowserBookmark } from '../lib/bookmarks';
+import { NavigationSkeleton } from './NavigationSkeleton';
 
 const ui = {
   en: {
@@ -347,6 +349,15 @@ function CategorySelect({
   );
 }
 
+function OperationToast({ toast, inline = false }: { toast: { status: 'saving' | 'done' | 'error'; msg: string } | null; inline?: boolean }) {
+  if (!toast) return null;
+  return <div role={toast.status === 'error' ? 'alert' : 'status'} className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium shadow-lg pointer-events-none ${inline ? 'w-full' : 'fixed bottom-6 right-6 z-50 max-w-[calc(100vw-3rem)]'} ${
+    toast.status === 'error' ? 'border-red-100 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300'
+      : toast.status === 'done' ? 'border-gray-200 bg-white text-green-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-green-400'
+        : 'border-gray-200 bg-white text-gray-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-400'
+  }`}>{toast.status === 'saving' ? <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <Check className="h-3.5 w-3.5 shrink-0" />}<span className="min-w-0 break-words">{toast.msg}</span></div>;
+}
+
 type CategoryEditorDraft = {
   mode: 'site-add' | 'site-edit' | 'category-create' | 'category-edit';
   selectedCategoryId: string;
@@ -376,6 +387,7 @@ export default function Categories() {
     getShare,
     deleteShare,
     importSharedLinks,
+    refreshCategories,
   } = useCategories();
   const { summary, refreshMembership, openUpgradeDialog } = useContext(MembershipContext);
   const { isPreview, requestLogin } = useContext(PreviewContext);
@@ -398,14 +410,15 @@ export default function Categories() {
   const [shareSelectedIds, setShareSelectedIds] = useState<Set<string>>(new Set());
   const [shareResult, setShareResult] = useState<{ code: string; expiresAt: string; sharerName: string; sharerAvatarUrl?: string } | null>(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
-  const [isImportingShare, setIsImportingShare] = useState(false);
   const [isChoosingImport, setIsChoosingImport] = useState(false);
-  const [importCode, setImportCode] = useState('');
   const [loadedShare, setLoadedShare] = useState<NavShare | null>(null);
   const [importSelectedIds, setImportSelectedIds] = useState<Set<string>>(new Set());
   const [importTargetMode, setImportTargetMode] = useState<'existing' | 'new'>('existing');
   const [importCategoryId, setImportCategoryId] = useState('');
   const [importNewCategory, setImportNewCategory] = useState({ id: '', title: '', description: '' });
+  const [importPage, setImportPage] = useState(0);
+  const [importFilter, setImportFilter] = useState('');
+  const filteredImportLinks = loadedShare?.links.filter(item => `${item.name} ${item.url} ${item.description}`.toLocaleLowerCase().includes(importFilter.toLocaleLowerCase())) ?? [];
   const [wallpaperContrast, setWallpaperContrast] = useState<WallpaperContrastSample | null>(null);
   const selectedCategory = categories.find(c => c.id === selectedCategoryId);
   const hasReachedCategoryLimit = summary.plan === 'free' && summary.categoryCount >= FREE_CATEGORY_LIMIT;
@@ -485,6 +498,12 @@ export default function Categories() {
   const glassHoverClass = hasWallpaper
     ? 'hover:border-white/70 dark:hover:border-white/20'
     : 'hover:border-gray-300 hover:shadow-lg dark:hover:border-gray-600';
+  const addActionCardClass = hasWallpaper
+    ? useDarkGlassSurface ? 'border-white/25 text-white/75 hover:border-white/45 hover:bg-white/10 hover:text-white' : 'border-gray-900/20 text-gray-800 hover:border-gray-900/35 hover:bg-white/40'
+    : 'border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:bg-zinc-800';
+  const addActionIconClass = hasWallpaper
+    ? useDarkGlassSurface ? 'bg-white/10 group-hover:bg-white/15' : 'bg-white/45 group-hover:bg-white/60'
+    : 'bg-gray-100 group-hover:bg-gray-200 dark:bg-zinc-700 dark:group-hover:bg-zinc-600';
   const modalSurfaceClass = hasWallpaper
     ? 'border-white/35 dark:border-white/10'
     : 'bg-white dark:bg-zinc-800';
@@ -900,20 +919,21 @@ export default function Categories() {
   };
 
   const openImportModal = () => {
-    setImportCode('');
+    setToast(null);
     setLoadedShare(null);
     setImportSelectedIds(new Set());
     setImportTargetMode('existing');
     setImportCategoryId(selectedCategoryId || categories[0]?.id || '');
     setImportNewCategory({ id: '', title: '', description: '' });
-    setIsImportingShare(true);
+    setImportPage(0);
+    setImportFilter('');
+    setIsChoosingImport(true);
   };
 
-  const handleLoadShareCode = async () => {
-    const share = await getShare(importCode);
+  const handleLoadShareCode = async (code: string) => {
+    const share = await getShare(code);
     if (!share) {
-      finishToast(t.noShareFound, 'error');
-      return;
+      return false;
     }
 
     const seenShareUrls = new Set<string>();
@@ -937,11 +957,31 @@ export default function Categories() {
       description: share.categoryDescription,
     });
     finishToast(duplicateCount > 0 ? t.toastDuplicatesRemoved(duplicateCount) : t.toastShareLoaded);
+    return true;
   };
 
-  const handleImportSharedLinks = async () => {
-    if (isPreview) { requestLogin('import'); return; }
-    if (!loadedShare || importSelectedIds.size === 0) return;
+  const handleReadBookmarks = (rows: BrowserBookmark[], fileName: string) => {
+    const seen = new Set<string>();
+    const links: LinkItem[] = [];
+    for (const row of rows) {
+      const key = bookmarkUrlKey(row.url);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      links.push({ id: row.id, name: row.name, url: row.url, description: '', icon: 'link' });
+    }
+    setLoadedShare({ code: '', categoryTitle: fileName, categoryDescription: '', links, expiresAt: '', sharerName: '' });
+    setImportSelectedIds(new Set(links.length <= MAX_BOOKMARK_IMPORT ? links.map(item => item.id) : []));
+    setImportPage(0);
+    setImportFilter('');
+  };
+
+  const handleImportSharedLinks = async (keepOpen: boolean) => {
+    if (isPreview) { requestLogin('import'); return false; }
+    if (!loadedShare || importSelectedIds.size === 0 || summary.loading) return false;
+    if (importSelectedIds.size > MAX_BOOKMARK_IMPORT) {
+      finishToast(lang === 'zh' ? `每批最多导入 ${MAX_BOOKMARK_IMPORT} 个网址，请减少选择。` : `Select up to ${MAX_BOOKMARK_IMPORT} sites per batch.`, 'error');
+      return false;
+    }
 
     let targetCategoryId = importCategoryId;
     if (importTargetMode === 'new') {
@@ -955,17 +995,19 @@ export default function Categories() {
       });
       if (!created) {
         if (hasReachedCategoryLimit) openUpgradeDialog();
-        return;
+        return false;
       }
+      setImportTargetMode('existing');
+      setImportCategoryId(created.id);
       await refreshMembership();
     }
 
     const selectedLinks = loadedShare.links.filter((item) => importSelectedIds.has(item.id));
     const targetCategory = categories.find((category) => category.id === targetCategoryId);
-    const existingUrls = new Set((targetCategory?.items ?? []).map((item) => normalizeUrlForCompare(item.url)));
+    const existingUrls = new Set((targetCategory?.items ?? []).map((item) => bookmarkUrlKey(item.url)));
     let duplicateCount = 0;
     const links = selectedLinks.filter((item) => {
-      const key = normalizeUrlForCompare(item.url);
+      const key = bookmarkUrlKey(item.url);
       if (!key || existingUrls.has(key)) {
         duplicateCount += 1;
         return false;
@@ -976,29 +1018,32 @@ export default function Categories() {
 
     if (links.length === 0) {
       finishToast(duplicateCount > 0 ? t.toastDuplicatesRemoved(duplicateCount) : t.selectAtLeastOne, 'error');
-      return;
+      return false;
+    }
+
+    if (!targetCategoryId) {
+      finishToast(lang === 'zh' ? '请选择目标分类。' : 'Choose a target category.', 'error');
+      return false;
     }
 
     startToast(t.toastSaving);
     const imported = await importSharedLinks(targetCategoryId, links);
     if (imported) {
       setSelectedCategoryId(targetCategoryId);
-      setIsImportingShare(false);
+      if (keepOpen) {
+        const processed = new Set(importSelectedIds);
+        setLoadedShare(current => current ? { ...current, links: current.links.filter(item => !processed.has(item.id)) } : current);
+        setImportSelectedIds(new Set());
+        setImportPage(0);
+      } else setIsChoosingImport(false);
       await refreshMembership();
-      finishToast(duplicateCount > 0 ? t.toastDuplicatesRemoved(duplicateCount) : t.toastImported);
-    } else if (hasReachedLinkLimit) {
-      finishToast('免费用户最多可保存 30 个网站，请升级会员后继续添加。', 'error');
-      openUpgradeDialog();
+      finishToast(lang === 'zh' ? `导入成功，已保存 ${links.length} 个网址。` : `${links.length} sites imported successfully.`);
+      return true;
     }
-  };
-
-  const handleImportPrimaryAction = async () => {
-    if (!loadedShare) {
-      await handleLoadShareCode();
-      return;
-    }
-
-    await handleImportSharedLinks();
+    await refreshCategories();
+    finishToast(lang === 'zh' ? '未能确认导入结果，已重新同步数据。请检查网络及会员额度后重试。' : 'Could not confirm the import. Data has been re-synced; check your connection and account limits, then retry.', 'error');
+    if (hasReachedLinkLimit) openUpgradeDialog();
+    return false;
   };
 
   const handleDeleteCategoryFromList = async (categoryId: string) => {
@@ -1052,6 +1097,9 @@ export default function Categories() {
     }
   };
 
+  if (loading && categories.length === 0) {
+    return <main className="mx-auto w-full max-w-[1200px] flex-1 px-6 py-8 lg:px-20"><NavigationSkeleton variant="categories" label={lang === 'zh' ? '正在加载分类…' : 'Loading categories…'} /></main>;
+  }
 
   return (
     <>
@@ -1162,7 +1210,8 @@ export default function Categories() {
                 <span className="truncate">{showFavicons ? t.hideIcons : t.showIcons}</span>
               </button>
               <button
-                onClick={() => setIsChoosingImport(true)}
+                onClick={openImportModal}
+                data-onboarding="import-links"
                 className={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium transition-all md:w-full md:gap-2 md:px-4 md:text-sm ${
                   hasWallpaper ? `${useDarkGlassSurface ? 'bg-white/10 text-white/75 hover:bg-white/15 hover:text-white' : 'bg-white/45 text-gray-800 hover:bg-white/60'}` : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-600'
                 }`}
@@ -1195,6 +1244,7 @@ export default function Categories() {
             <div className="flex items-center gap-2">
               <button
                 onClick={openShareModal}
+                data-onboarding="share-category"
                 disabled={!selectedCategory || selectedCategory.items.length === 0}
                 className={`rounded-lg p-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${hasWallpaper ? `${mutedTextClass} ${useDarkGlassSurface ? 'hover:bg-white/10 hover:text-white' : 'hover:bg-white/35 hover:text-gray-950'}` : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-zinc-800'}`}
                 title={t.shareCategoryLabel}
@@ -1296,18 +1346,11 @@ export default function Categories() {
             {/* Add New Link Placeholder — always visible */}
             <button
               onClick={startAddNew}
+              data-onboarding="add-site"
               style={reducedFillSurfaceStyle ?? glassSurfaceStyle}
-              className={`col-span-2 flex h-[136px] min-h-0 flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 transition-all group md:h-[170px] md:min-h-0 lg:col-span-3 ${
-                hasWallpaper
-                  ? `${useDarkGlassSurface ? 'border-white/25 text-white/75 hover:border-white/45 hover:bg-white/10 hover:text-white' : 'border-gray-900/20 text-gray-800 hover:border-gray-900/35 hover:bg-white/40'}`
-                  : 'border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-white dark:border-zinc-600 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:bg-zinc-800'
-              }`}
+              className={`col-span-2 flex h-[136px] min-h-0 flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 transition-all group md:h-[170px] md:min-h-0 lg:col-span-3 ${addActionCardClass}`}
             >
-              <div className={`mb-2 flex h-10 w-10 items-center justify-center rounded-full transition-colors md:h-11 md:w-11 ${
-                hasWallpaper
-                  ? `${useDarkGlassSurface ? 'bg-white/10 group-hover:bg-white/15' : 'bg-white/45 group-hover:bg-white/60'}`
-                  : 'bg-gray-100 group-hover:bg-gray-200 dark:bg-zinc-700 dark:group-hover:bg-zinc-600'
-              }`}>
+              <div className={`mb-2 flex h-10 w-10 items-center justify-center rounded-full transition-colors md:h-11 md:w-11 ${addActionIconClass}`}>
                 <Plus className="w-5 h-5 md:w-6 md:h-6" />
               </div>
               <span className="font-semibold text-sm md:text-base">{t.addNewSite}</span>
@@ -1669,61 +1712,26 @@ export default function Categories() {
     )}
 
     {isChoosingImport && <LinkImportDialog
-      defaultCategoryId={selectedCategoryId || categories[0]?.id || ''}
       surfaceStyle={topGlassSurfaceStyle}
       surfaceClass={modalSurfaceClass}
       fieldClass={formFieldClass}
       labelClass={modalLabelClass}
-      itemClass={modalItemClass}
       primaryClass={primaryButtonClass}
       darkSurface={useDarkGlassSurface}
+      uploadSurfaceStyle={reducedFillSurfaceStyle ?? glassSurfaceStyle}
+      uploadCardClass={addActionCardClass}
+      uploadIconClass={addActionIconClass}
+      uploadCaptionClass={cardSecondaryTextClass}
       onClose={() => setIsChoosingImport(false)}
-      onShare={() => { setIsChoosingImport(false); openImportModal(); }}
-      onImported={(categoryId, count) => { setSelectedCategoryId(categoryId); setIsChoosingImport(false); finishToast(lang === 'zh' ? `已导入 ${count} 个网址` : `${count} sites imported`); }}
-    />}
-
-    {/* Import Shared Links Modal */}
-    {isImportingShare && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={() => setIsImportingShare(false)}
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        />
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          transition={{ type: "spring", duration: 0.3 }}
-          onClick={(e) => e.stopPropagation()}
-          style={topGlassSurfaceStyle}
-          className={`dash-scrollbar relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border p-6 shadow-2xl ${modalSurfaceClass}`}
-        >
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex items-center gap-3">
-              <Download className="h-5 w-5 text-gray-900 dark:text-gray-100" />
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t.importShare}</h2>
-              </div>
-            </div>
-          </div>
-
-          {!loadedShare && (
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                value={importCode}
-                onChange={(e) => setImportCode(e.target.value.toUpperCase())}
-                placeholder={t.shareCodePlaceholder}
-                className={`${formFieldClass} min-w-0 flex-1 rounded-lg px-3 py-2.5 text-base outline-none ring-1 ring-transparent transition`}
-              />
-            </div>
-          )}
-
+      onReadShareCode={handleLoadShareCode}
+      onReadBookmarks={handleReadBookmarks}
+      onImport={handleImportSharedLinks}
+      selectedCount={importSelectedIds.size}
+      notice={toast ? <OperationToast toast={toast} inline /> : null}
+    >
           {loadedShare && (
-            <div className="mt-5 space-y-5">
-              <div className={`flex items-start justify-between gap-4 rounded-lg p-4 ${hasWallpaper ? (useDarkGlassSurface ? 'bg-white/10' : 'bg-white/35') : 'bg-gray-100 dark:bg-zinc-700'}`}>
+            <div className="space-y-5">
+              {loadedShare.code && <div className={`flex items-start justify-between gap-4 rounded-lg p-4 ${formFieldClass}`}>
                 <div className="min-w-0">
                   <p className="font-semibold text-gray-900 dark:text-gray-100">{loadedShare.categoryTitle}</p>
                   {loadedShare.categoryDescription && (
@@ -1731,15 +1739,24 @@ export default function Categories() {
                   )}
                 </div>
                 <ShareAuthor name={loadedShare.sharerName} avatarUrl={loadedShare.sharerAvatarUrl} />
-              </div>
+              </div>}
+
+              {loadedShare.links.length > 0 && <div className="space-y-3">
+                <input aria-label={lang === 'zh' ? '筛选导入网址' : 'Filter import sites'} placeholder={lang === 'zh' ? '搜索网站名称或网址' : 'Search site names or URLs'} value={importFilter} onChange={event => { setImportFilter(event.target.value); setImportPage(0); }} className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring`} />
+                <div className="flex justify-end gap-4 text-sm">
+                  <button type="button" className="rounded px-1 py-1 focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setImportSelectedIds(current => new Set([...current, ...filteredImportLinks.map(item => item.id)]))}>{lang === 'zh' ? '全选' : 'Select all'}</button>
+                  <button type="button" className="rounded px-1 py-1 focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setImportSelectedIds(new Set())}>{lang === 'zh' ? '清空选择' : 'Clear selection'}</button>
+                </div>
+              </div>}
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {loadedShare.links.map((item) => {
+                {filteredImportLinks.slice(importPage * 40, (importPage + 1) * 40).map((item) => {
                   const selected = importSelectedIds.has(item.id);
                   return (
                     <button
                       key={item.id}
                       type="button"
+                      aria-pressed={selected}
                       onClick={() => setImportSelectedIds((current) => toggleSetValue(current, item.id))}
                       className={`flex min-h-[88px] items-center gap-3 rounded-lg border py-3 pl-3 pr-3.5 text-left transition ${
                         selected
@@ -1764,7 +1781,14 @@ export default function Categories() {
                 })}
               </div>
 
-              <div className="space-y-3">
+              {!filteredImportLinks.length && <p className={`py-6 text-center text-sm ${modalLabelClass}`}>{loadedShare.links.length ? (lang === 'zh' ? '没有匹配的网址。' : 'No matching sites.') : (lang === 'zh' ? '所有网址已处理，可点击“完成导入”。' : 'All sites have been processed. Choose Finish importing.')}</p>}
+              {filteredImportLinks.length > 40 && <div className="flex items-center justify-between gap-3 text-sm">
+                <button type="button" aria-label={lang === 'zh' ? '上一页' : 'Previous'} title={lang === 'zh' ? '上一页' : 'Previous'} disabled={importPage === 0} onClick={() => setImportPage(value => value - 1)} className="flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"><ChevronLeft aria-hidden="true" className="h-5 w-5" /></button>
+                <span>{importPage + 1} / {Math.ceil(filteredImportLinks.length / 40)}</span>
+                <button type="button" aria-label={lang === 'zh' ? '下一页' : 'Next'} title={lang === 'zh' ? '下一页' : 'Next'} disabled={(importPage + 1) * 40 >= filteredImportLinks.length} onClick={() => setImportPage(value => value + 1)} className="flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"><ChevronRight aria-hidden="true" className="h-5 w-5" /></button>
+              </div>}
+
+              {loadedShare.links.length > 0 && <div className="space-y-3">
                 <p className={`text-xs font-semibold uppercase tracking-wide ${modalLabelClass}`}>{t.importTo}</p>
                 <div className="flex items-center gap-5 border-b border-gray-200 dark:border-zinc-700">
                   <button
@@ -1833,55 +1857,14 @@ export default function Categories() {
                     </label>
                   </div>
                 )}
-              </div>
+              </div>}
             </div>
           )}
 
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => setIsImportingShare(false)}
-              className="flex h-10 items-center gap-2 rounded-lg px-6 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-zinc-700"
-            >
-              <X className="w-4 h-4" />
-              {t.cancel}
-            </button>
-            <button
-              type="button"
-              onClick={handleImportPrimaryAction}
-              disabled={!loadedShare ? !importCode.trim() : importSelectedIds.size === 0}
-              className={`flex h-10 items-center gap-2 px-6 text-sm font-medium ${primaryButtonClass}`}
-            >
-              {loadedShare ? <Download className="w-4 h-4" /> : <KeyRound className="w-4 h-4" />}
-              {loadedShare ? t.importSelected : t.loadShareCode}
-            </button>
-          </div>
-        </motion.div>
-      </div>
-    )}
+    </LinkImportDialog>}
 
     {/* Operation status toast */}
-    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium transition-all duration-300 pointer-events-none ${
-      toast === null ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
-    } ${
-      toast?.status === 'error'
-        ? 'bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 text-red-700 dark:text-red-300'
-        : toast?.status === 'done'
-        ? 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-green-600 dark:text-green-400'
-        : 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-gray-400'
-    }`}>
-      {toast?.status === 'saving' ? (
-        <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-        </svg>
-      ) : (
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      )}
-      <span>{toast?.msg ?? ''}</span>
-    </div>
+    {!isChoosingImport && <OperationToast toast={toast} />}
 
     {/* 页脚 */}
     <footer className={`relative z-10 mt-auto border-t transition-colors duration-200 ${

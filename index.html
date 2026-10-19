@@ -7,6 +7,8 @@
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>Dash-Navigation</title>
       <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+      <link rel="stylesheet" href="/loading.css" />
+      <script>try { document.documentElement.classList.toggle('dark', (sessionStorage.getItem('dash-preview-theme') || localStorage.getItem('theme')) === 'dark'); } catch {}</script>
       <meta name="description" content="This responsive personal website navigation page organizes links by category, featuring a minimalist design and a search bar for easy access to resources." />
       <meta name="robots" content="noindex, nofollow" />
       <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
@@ -15,7 +17,7 @@
 
     <body>
       
-      <div id="root"></div>
+      <div id="root"><div class="dash-loading dash-loading--page" role="status" aria-busy="true"><span class="dash-loading-sr">正在加载 Dash…</span><div aria-hidden="true"><div class="dash-loading-nav"><strong>Dash</strong><div class="dash-loading-block dash-loading-icon"></div></div><div class="dash-loading-container"><div class="dash-loading-search"><div class="dash-loading-block dash-loading-field"></div></div><div class="dash-loading-block dash-loading-title"></div><div class="dash-loading-grid"><div class="dash-loading-card"><div class="dash-loading-block dash-loading-icon"></div><div><div class="dash-loading-block"></div><div class="dash-loading-block dash-loading-detail"></div></div></div><div class="dash-loading-card"><div class="dash-loading-block dash-loading-icon"></div><div><div class="dash-loading-block"></div><div class="dash-loading-block dash-loading-detail"></div></div></div><div class="dash-loading-card"><div class="dash-loading-block dash-loading-icon"></div><div><div class="dash-loading-block"></div><div class="dash-loading-block dash-loading-detail"></div></div></div></div></div></div></div></div>
       <script type="module" src="/src/main.tsx"></script>
       
     </body>

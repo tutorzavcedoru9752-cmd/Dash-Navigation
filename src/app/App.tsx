@@ -6,6 +6,9 @@ import type { Session } from '@supabase/supabase-js';
 import Home from './components/Home';
 import Categories from './components/Categories';
 import WallpaperDialog from './components/WallpaperDialog';
+import { NavigationSkeleton } from './components/NavigationSkeleton';
+import { OnboardingContext, OnboardingProvider } from './components/OnboardingTour';
+import { markOnboardingPending } from './lib/onboarding';
 import { supabase } from './lib/supabase';
 import { getTurnstileToken } from './lib/turnstile';
 import { NavigationDataProvider } from './hooks/useCategories';
@@ -593,6 +596,13 @@ function NavBar() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
+  const onboarding = useContext(OnboardingContext);
+
+  useEffect(() => {
+    if (!onboarding.active) return;
+    setAccountOpen(onboarding.step === 2);
+    return () => setAccountOpen(false);
+  }, [onboarding.active, onboarding.step]);
   const [displayName, setDisplayName] = useState('');
   const [avatarInput, setAvatarInput] = useState('');
   const [profileStatus, setProfileStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -679,6 +689,7 @@ function NavBar() {
   useEffect(() => {
     const handler = (event: MouseEvent) => {
       const target = event.target as Node;
+      if (target instanceof Element && target.closest('[data-onboarding-panel]')) return;
       if (
         accountRef.current
         && !accountRef.current.contains(target)
@@ -800,6 +811,7 @@ function NavBar() {
           <div ref={accountRef} className="relative pl-2 sm:pl-4">
             <button
               ref={accountButtonRef}
+              data-onboarding="account"
               type="button"
               onClick={() => setAccountOpen((open) => !open)}
               title={email || accountLabels.account}
@@ -869,6 +881,7 @@ function NavBar() {
                 </button>
                 <div className="space-y-1.5">
                   <button
+                    data-onboarding="wallpaper"
                     type="button"
                     onClick={() => {
                       setAccountOpen(false);
@@ -1370,7 +1383,7 @@ function AuthScreen({ notice }: { notice?: string }) {
     }
 
     if (mode === 'sign-up') {
-      const { error: authError } = await supabase.auth.signUp({
+      const { data, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -1382,6 +1395,7 @@ function AuthScreen({ notice }: { notice?: string }) {
       if (authError) {
         setError(authError.message);
       } else {
+        if (data.user) markOnboardingPending(data.user.id);
         setMode('verify-sign-up');
         setMessage(t.success);
       }
@@ -1681,14 +1695,8 @@ function PasswordResetScreen({ onDone }: { onDone: (notice: string) => void }) {
 
 function LoadingScreen() {
   const { lang } = useContext(LangContext);
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-300">
-      <div className="flex items-center gap-3 text-sm">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        {AUTH_LABELS[lang].loading}
-      </div>
-    </main>
-  );
+  const { pathname } = useLocation();
+  return <NavigationSkeleton fullPage variant={pathname === '/categories' ? 'categories' : 'home'} label={AUTH_LABELS[lang].loading} />;
 }
 
 function UpgradeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -2357,6 +2365,7 @@ export default function App() {
                   <Route path="/login" element={session ? <Navigate to="/" replace /> : <AuthScreen notice={authNotice} />} />
                   <Route path="*" element={(
                     <NavigationDataProvider>
+                      <OnboardingProvider>
                       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-zinc-900 flex flex-col transition-colors duration-200">
                         <NavBar />
                         <Routes>
@@ -2369,6 +2378,7 @@ export default function App() {
                           <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
                       </div>
+                      </OnboardingProvider>
                     </NavigationDataProvider>
                   )} />
                 </Routes>

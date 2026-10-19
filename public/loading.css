@@ -1,0 +1,36 @@
+/* Semantic loading tokens shared by the boot screen and React skeletons. */
+.dash-loading {
+  --loading-canvas: var(--background, #ffffff);
+  --loading-ink: var(--foreground, #111827);
+  --loading-line: color-mix(in srgb, var(--loading-ink) 10%, transparent);
+  --loading-highlight: color-mix(in srgb, var(--loading-ink) 8%, transparent);
+  --loading-border: color-mix(in srgb, var(--loading-ink) 8%, transparent);
+  color: var(--loading-ink);
+}
+.dark .dash-loading { --loading-canvas: var(--background, #09090b); --loading-ink: var(--foreground, #f4f4f5); }
+.dash-loading--page { min-height: 100vh; background: var(--loading-canvas); }
+.dash-loading-nav { height: 50px; border-bottom: 1px solid var(--loading-border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; }
+.dash-loading-nav strong { font: 700 24px system-ui, sans-serif; }
+.dash-loading-nav > div { display: flex; align-items: center; gap: 20px; }
+.dash-loading-container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; box-sizing: border-box; }
+.dash-loading-search { max-width: 760px; margin: 0 auto 40px; }
+.dash-loading-group { margin-bottom: 32px; }
+.dash-loading-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.dash-loading-card { min-width: 0; display: flex; align-items: center; gap: 16px; padding: 20px; border: 1px solid var(--loading-border); border-radius: 12px; }
+.dash-loading-card > div:last-child { flex: 1; min-width: 0; }
+.dash-loading-block { display: block; position: relative; overflow: hidden; flex-shrink: 0; height: 16px; border-radius: 8px; background: var(--loading-line); }
+.dash-loading-block + .dash-loading-block { margin-top: 12px; }
+.dash-loading-block::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--loading-highlight), transparent); transform: translateX(-100%); animation: dash-skeleton-shimmer 1.8s linear infinite; }
+.dash-loading-icon { height: 44px; width: 44px; border-radius: 10px; }
+.dash-loading-title { width: 32%; height: 24px; }
+.dash-loading-detail { width: 80%; }
+.dash-loading-field { height: 50px; width: 100%; }
+.dash-loading-sidebar { width: 240px; flex-shrink: 0; }
+.dash-loading-columns { display: flex; gap: 24px; }
+.dash-loading-content { flex: 1; min-width: 0; }
+.dash-loading-sr { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+@keyframes dash-skeleton-shimmer { to { transform: translateX(100%); } }
+@media (min-width: 1024px) { .dash-loading-container { padding-left: 80px; padding-right: 80px; } .dash-loading-nav { padding-inline: max(80px, calc((100% - 1200px) / 2 + 80px)); } }
+@media (max-width: 767px) { .dash-loading-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .dash-loading-card { padding: 16px; gap: 12px; } .dash-loading-columns { flex-direction: column; } .dash-loading-sidebar { width: 100%; } }
+@media (max-width: 479px) { .dash-loading-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .dash-loading-block::after { animation: none; transform: none; opacity: 0.35; } }
