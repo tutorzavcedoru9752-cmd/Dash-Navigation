@@ -84,7 +84,8 @@ export default function OnboardingPopover({ step, onNext, onDismiss }: { step: n
           onOpenAutoFocus={event => { event.preventDefault(); nextButton.current?.focus(); }}
           onCloseAutoFocus={event => event.preventDefault()}
           className={`dash-tour-panel z-[110] w-80 max-w-[calc(100vw-2rem)] rounded-xl border p-4 shadow-xl outline-none ${darkSurface ? 'dark' : ''}`}
-          style={{ '--onboarding-opacity': opacity } as CSSProperties}
+          // Match existing glass dialogs: inline filters survive production CSS prefix optimization.
+          style={{ '--onboarding-opacity': opacity, backdropFilter: 'blur(18px) saturate(1.2)', WebkitBackdropFilter: 'blur(18px) saturate(1.2)' } as CSSProperties}
         >
           <h2 id="onboarding-title" className="text-base font-semibold leading-7">{content}</h2>
           <div className="mt-5 flex items-center justify-between gap-4">

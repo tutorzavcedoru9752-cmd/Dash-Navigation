@@ -2,7 +2,5 @@
   background: rgb(var(--onboarding-surface) / var(--onboarding-opacity, 0.85));
   color: var(--foreground);
   border-color: var(--border);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
 .dash-tour-arrow { fill: rgb(var(--onboarding-surface) / var(--onboarding-opacity, 0.85)); }
