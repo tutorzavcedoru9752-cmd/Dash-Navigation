@@ -299,6 +299,9 @@ const AUTH_LABELS = {
     verificationCode: 'Verification code',
     verificationCodePlaceholder: '6-digit code',
     resendCode: 'Resend code',
+    resendCountdown: (seconds: number) => `Resend in ${seconds}s`,
+    resendLimited: 'You’ve requested codes too quickly. Wait for the countdown before trying again.',
+    resendingCode: 'Sending…',
     forgotPassword: 'Forgot password?',
     sendResetLink: 'Send reset email',
     resetPassword: 'Reset password',
@@ -324,6 +327,9 @@ const AUTH_LABELS = {
     verificationCode: '验证码',
     verificationCodePlaceholder: '6 位验证码',
     resendCode: '重新发送验证码',
+    resendCountdown: (seconds: number) => `${seconds} 秒后可重发`,
+    resendLimited: '验证码请求过于频繁，请等倒计时结束后再试。',
+    resendingCode: '正在发送…',
     forgotPassword: '忘记密码？',
     sendResetLink: '发送重置邮件',
     resetPassword: '重置密码',
@@ -341,6 +347,7 @@ const AUTH_LABELS = {
 };
 
 type AuthMode = 'sign-in' | 'sign-up' | 'verify-sign-up' | 'forgot-password';
+const SIGNUP_RESEND_COOLDOWN_SECONDS = 60;
 
 function getFallbackName(session: Session | null) {
   return session?.user.email?.split('@')[0] || 'User';
@@ -1352,6 +1359,9 @@ function AuthScreen({ notice }: { notice?: string }) {
   const [message, setMessage] = useState(notice ?? '');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendUntil, setResendUntil] = useState(0);
+  const [resendSeconds, setResendSeconds] = useState(0);
 
   const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://dash-navigation.vercel.app/login';
 
@@ -1359,7 +1369,29 @@ function AuthScreen({ notice }: { notice?: string }) {
     setMessage(notice ?? '');
   }, [notice]);
 
+  useEffect(() => {
+    if (mode !== 'verify-sign-up' || !resendUntil) return;
+    const sync = () => {
+      const remaining = Math.max(0, Math.ceil((resendUntil - Date.now()) / 1000));
+      setResendSeconds(remaining);
+      if (remaining === 0) setResendUntil(0);
+    };
+    sync();
+    const interval = window.setInterval(sync, 250);
+    document.addEventListener('visibilitychange', sync);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', sync);
+    };
+  }, [mode, resendUntil]);
+
+  const startResendCooldown = (seconds = SIGNUP_RESEND_COOLDOWN_SECONDS) => {
+    setResendSeconds(seconds);
+    setResendUntil(Date.now() + seconds * 1000);
+  };
+
   const switchMode = (nextMode: AuthMode) => {
+    if (submitting || resending) return;
     setMode(nextMode);
     setError('');
     setMessage('');
@@ -1370,6 +1402,7 @@ function AuthScreen({ notice }: { notice?: string }) {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitting || resending) return;
     setSubmitting(true);
     setMessage('');
     setError('');
@@ -1396,6 +1429,7 @@ function AuthScreen({ notice }: { notice?: string }) {
         setError(authError.message);
       } else {
         if (data.user) markOnboardingPending(data.user.id);
+        startResendCooldown();
         setMode('verify-sign-up');
         setMessage(t.success);
       }
@@ -1439,35 +1473,39 @@ function AuthScreen({ notice }: { notice?: string }) {
   };
 
   const handleResendCode = async () => {
-    if (!email || submitting) return;
-    setSubmitting(true);
+    if (mode !== 'verify-sign-up' || !email || submitting || resending || Date.now() < resendUntil) return;
+    setResending(true);
     setError('');
     setMessage('');
 
-    let captchaToken: string | undefined;
     try {
-      captchaToken = await getTurnstileToken('auth_resend_signup');
-    } catch (captchaError) {
-      setError(captchaError instanceof Error ? captchaError.message : String(captchaError));
-      setSubmitting(false);
-      return;
+      const captchaToken = await getTurnstileToken('auth_resend_signup');
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: {
+          emailRedirectTo: redirectTo,
+          ...(captchaToken ? { captchaToken } : {}),
+        },
+      });
+      // Some responses omit the structured code but still include the remaining wait.
+      const retrySeconds = Number(resendError?.message.match(/after (\d+) seconds?\b/i)?.[1]);
+      const hasRetrySeconds = Number.isSafeInteger(retrySeconds) && retrySeconds > 0;
+      if (resendError?.code === 'over_email_send_rate_limit' || (resendError?.status === 429 && hasRetrySeconds)) {
+        startResendCooldown(hasRetrySeconds ? retrySeconds : SIGNUP_RESEND_COOLDOWN_SECONDS);
+        setError(t.resendLimited);
+      } else if (resendError) {
+        setError(resendError.message);
+      } else {
+        startResendCooldown();
+        setVerificationCode('');
+        setMessage(t.success);
+      }
+    } catch (resendError) {
+      setError(resendError instanceof Error ? resendError.message : String(resendError));
+    } finally {
+      setResending(false);
     }
-    const { error: resendError } = await supabase.auth.resend({
-      type: 'signup',
-      email,
-      options: {
-        emailRedirectTo: redirectTo,
-        ...(captchaToken ? { captchaToken } : {}),
-      },
-    });
-
-    if (resendError) {
-      setError(resendError.message);
-    } else {
-      setMessage(t.success);
-    }
-
-    setSubmitting(false);
   };
 
   const primaryButtonLabel = {
@@ -1485,7 +1523,7 @@ function AuthScreen({ notice }: { notice?: string }) {
             <Lock className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="whitespace-nowrap text-xl font-semibold text-gray-900 dark:text-gray-100 sm:text-2xl">{t.title}</h1>
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 sm:text-2xl">{t.title}</h1>
             <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{t.subtitle}</p>
           </div>
         </div>
@@ -1498,6 +1536,7 @@ function AuthScreen({ notice }: { notice?: string }) {
               <input
                 type="email"
                 required
+                readOnly={mode === 'verify-sign-up' || submitting}
                 autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -1530,6 +1569,7 @@ function AuthScreen({ notice }: { notice?: string }) {
                 required
                 inputMode="numeric"
                 autoComplete="one-time-code"
+                readOnly={resending || submitting}
                 minLength={6}
                 maxLength={6}
                 value={verificationCode}
@@ -1540,12 +1580,12 @@ function AuthScreen({ notice }: { notice?: string }) {
             </label>
           )}
 
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
-          {message && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">{message}</p>}
+          {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
+          {message && <p role="status" className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">{message}</p>}
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || resending}
             className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700"
           >
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -1587,14 +1627,15 @@ function AuthScreen({ notice }: { notice?: string }) {
                 <button
                   type="button"
                   onClick={handleResendCode}
-                  disabled={submitting || !email}
-                  className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
+                  disabled={submitting || resending || !email || resendSeconds > 0}
+                  className="min-h-11 text-sm font-medium tabular-nums text-gray-600 underline-offset-4 enabled:hover:text-gray-900 enabled:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:text-muted-foreground dark:text-gray-300 dark:enabled:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
                 >
-                  {t.resendCode}
+                  {resending ? t.resendingCode : resendSeconds > 0 ? t.resendCountdown(resendSeconds) : t.resendCode}
                 </button>
                 <button
                   type="button"
                   onClick={() => switchMode('sign-in')}
+                  disabled={submitting || resending}
                   className="text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 dark:text-gray-300 dark:hover:text-gray-100 dark:focus-visible:ring-zinc-600"
                 >
                   {t.backToSignIn}
