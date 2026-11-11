@@ -9,7 +9,7 @@ import { CUSTOM_WALLPAPER_ID, DEFAULT_WALLPAPER_ID, clampCardOpacity, getWallpap
 import { sampleWallpaperContrast, toneForWallpaperLuminance, type WallpaperContrastSample } from '../lib/wallpaperContrast';
 import { readUiDraft, removeUiDraft, UI_DRAFT_SCOPES, writeUiDraft } from '../lib/uiDrafts';
 import LinkImportDialog from './LinkImportDialog';
-import { MAX_BOOKMARK_IMPORT, bookmarkUrlKey, type BrowserBookmark } from '../lib/bookmarks';
+import { MAX_BOOKMARK_IMPORT, bookmarkUrlKey, resolveBookmarkFavicons, type BrowserBookmark } from '../lib/bookmarks';
 import { NavigationSkeleton } from './NavigationSkeleton';
 
 const ui = {
@@ -967,7 +967,7 @@ export default function Categories() {
       const key = bookmarkUrlKey(row.url);
       if (!key || seen.has(key)) continue;
       seen.add(key);
-      links.push({ id: row.id, name: row.name, url: row.url, description: '', icon: 'link' });
+      links.push({ id: row.id, name: row.name, url: row.url, description: '', icon: 'link', faviconUrl: row.faviconUrl });
     }
     setLoadedShare({ code: '', categoryTitle: fileName, categoryDescription: '', links, expiresAt: '', sharerName: '' });
     setImportSelectedIds(new Set(links.length <= MAX_BOOKMARK_IMPORT ? links.map(item => item.id) : []));
@@ -1027,7 +1027,8 @@ export default function Categories() {
     }
 
     startToast(t.toastSaving);
-    const imported = await importSharedLinks(targetCategoryId, links);
+    const linksToImport = keepOpen ? await resolveBookmarkFavicons(links, fetchFaviconData) : links;
+    const imported = await importSharedLinks(targetCategoryId, linksToImport);
     if (imported) {
       setSelectedCategoryId(targetCategoryId);
       if (keepOpen) {

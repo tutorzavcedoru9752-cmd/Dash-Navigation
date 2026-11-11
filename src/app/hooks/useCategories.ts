@@ -264,7 +264,7 @@ const toCategory = (category: NavCategoryRow, links: NavLinkRow[]): Category => 
     })),
 });
 
-export const fetchFaviconData = async (url: string): Promise<string> => {
+export const fetchFaviconData = async (url: string, signal?: AbortSignal): Promise<string> => {
   try {
     const response = await fetch(`${API_BASE}/fetch-favicon`, {
       method: 'POST',
@@ -273,15 +273,17 @@ export const fetchFaviconData = async (url: string): Promise<string> => {
         'Authorization': `Bearer ${publicAnonKey}`,
       },
       body: JSON.stringify({ url }),
+      signal,
     });
 
+    if (!response.ok) return '';
     const result = await response.json();
     if (result.success && result.faviconData) {
       return result.faviconData;
     }
     return '';
   } catch (error) {
-    console.error('Error fetching favicon data:', error);
+    if (!signal?.aborted) console.error('Error fetching favicon data:', error);
     return '';
   }
 };
