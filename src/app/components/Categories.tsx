@@ -11,7 +11,7 @@ import { readUiDraft, removeUiDraft, UI_DRAFT_SCOPES, writeUiDraft } from '../li
 import LinkImportDialog from './LinkImportDialog';
 import { MAX_BOOKMARK_IMPORT, bookmarkUrlKey, resolveBookmarkFavicons, type BrowserBookmark } from '../lib/bookmarks';
 import { NavigationSkeleton } from './NavigationSkeleton';
-import { CircleAlert, GripVertical, Search } from 'lucide-react';
+import { CircleAlert, GripVertical, ListChecks, Search } from 'lucide-react';
 
 const ui = {
   en: {
@@ -231,6 +231,8 @@ const itemIconMap: Record<string, React.ReactNode> = {
 
 const primaryButtonClass = 'rounded-lg bg-gray-900 text-white transition hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-950 dark:text-white dark:hover:bg-blue-900 dark:focus-visible:ring-blue-700';
 const selectControlClass = 'w-full appearance-none rounded-lg border-none py-3 pl-3 pr-3 text-base outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-gray-300 dark:focus:ring-zinc-600';
+const selectionActionClass = 'min-h-9 rounded-lg px-2.5 text-xs font-semibold transition-colors hover:bg-accent/50 active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-45 motion-reduce:transition-none';
+const selectedSiteBadgeClass = 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950';
 
 function SiteFavicon({ item, showFavicon = true }: { item: Pick<LinkItem, 'name' | 'icon' | 'faviconUrl'>; showFavicon?: boolean }) {
   const [failed, setFailed] = useState(false);
@@ -384,6 +386,7 @@ export default function Categories() {
     updateItem,
     reorderItems,
     deleteItem,
+    changeSelectedSites,
     deleteCategory,
     createCategory,
     createShare,
@@ -416,6 +419,13 @@ export default function Categories() {
   const reduceMotion = useReducedMotion();
   const sortingSites = useRef(false);
   const [siteOrderBusy, setSiteOrderBusy] = useState(false);
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
+  const [batchAction, setBatchAction] = useState<'move' | 'delete' | null>(null);
+  const [batchDestination, setBatchDestination] = useState('');
+  const [batchBusy, setBatchBusy] = useState(false);
+  const batchDialog = useRef<HTMLDialogElement>(null);
+  const batchOperation = useRef(false);
   const [isSharingCategory, setIsSharingCategory] = useState(false);
   const [shareSelectedIds, setShareSelectedIds] = useState<Set<string>>(new Set());
   const [shareResult, setShareResult] = useState<{ code: string; expiresAt: string; sharerName: string; sharerAvatarUrl?: string } | null>(null);
@@ -437,6 +447,13 @@ export default function Categories() {
   const currentImportPage = Math.min(importPage, importPageCount - 1);
   const [wallpaperContrast, setWallpaperContrast] = useState<WallpaperContrastSample | null>(null);
   const selectedCategory = categories.find(c => c.id === selectedCategoryId);
+  const batchItems = selectedCategory?.items.filter(item => batchSelected.has(item.id)) ?? [];
+  const batchDestinations = categories.filter(category => category.id !== selectedCategoryId);
+
+  useEffect(() => {
+    setBatchMode(false);
+    setBatchSelected(new Set());
+  }, [selectedCategoryId]);
   const hasReachedCategoryLimit = summary.plan === 'free' && summary.categoryCount >= FREE_CATEGORY_LIMIT;
   const hasReachedLinkLimit = summary.plan === 'free' && summary.linkCount >= FREE_LINK_LIMIT;
   const builtInWallpaper = getWallpaperById(wallpaperSettings.wallpaperId);
@@ -532,6 +549,9 @@ export default function Categories() {
   const modalItemClass = hasWallpaper
     ? `${useDarkGlassSurface ? 'border-white/20 bg-white/8 hover:bg-white/14' : 'border-white/40 bg-white/35 hover:bg-white/55'}`
     : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500';
+  const selectedSiteSurfaceClass = hasWallpaper
+    ? (useDarkGlassSurface ? 'border-white/30 bg-white/12 shadow-sm' : 'border-white/65 bg-white/45 shadow-sm')
+    : 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700';
   const modalLabelClass = hasWallpaper
     ? useDarkGlassSurface ? 'text-white/80' : 'text-gray-700'
     : 'text-gray-700 dark:text-gray-300';
@@ -1136,6 +1156,46 @@ export default function Categories() {
     }
   };
 
+  const toggleBatchMode = () => {
+    setBatchSelected(new Set());
+    setBatchMode(current => !current);
+  };
+
+  const toggleBatchSite = (id: string) => {
+    setBatchSelected(current => toggleSetValue(current, id));
+  };
+
+  const openBatchAction = (action: 'move' | 'delete') => {
+    if (isPreview) { requestLogin('save'); return; }
+    setBatchAction(action);
+    setBatchDestination(batchDestinations[0]?.id ?? '');
+    batchDialog.current?.showModal();
+  };
+
+  const confirmBatchAction = async () => {
+    if (!batchAction || batchOperation.current || !batchItems.length) return;
+    const destination = batchAction === 'move' ? batchDestination : undefined;
+    if (batchAction === 'move' && !destination) return;
+    batchOperation.current = true;
+    setBatchBusy(true);
+    try {
+      const saved = await changeSelectedSites(selectedCategoryId, batchItems.map(item => item.id), destination);
+      batchDialog.current?.close();
+      if (saved) {
+        setBatchSelected(new Set());
+        finishToast(lang === 'zh'
+          ? (batchAction === 'move' ? `已移动 ${batchItems.length} 个网址` : `已删除 ${batchItems.length} 个网址`)
+          : (batchAction === 'move' ? `Moved ${batchItems.length} sites` : `Deleted ${batchItems.length} sites`));
+      } else {
+        finishToast(lang === 'zh' ? '批量操作未全部完成，请查看剩余网址后重试。' : 'Some sites could not be updated. Review the remaining sites and try again.', 'error');
+      }
+      if (batchAction === 'delete') void refreshMembership();
+    } finally {
+      batchOperation.current = false;
+      setBatchBusy(false);
+    }
+  };
+
   const trackSiteDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const drag = siteDrag.current;
     if (!drag || drag.pointer !== event.pointerId) return;
@@ -1339,7 +1399,7 @@ export default function Categories() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.4 }}
-            className="flex justify-between items-center mb-6"
+            className="mb-6 flex flex-wrap items-start justify-between gap-3"
           >
             <div>
               <h1 className={`text-2xl font-semibold ${categoryTextClass}`}>{selectedCategory?.title}</h1>
@@ -1363,6 +1423,17 @@ export default function Categories() {
                 <Edit2 className="w-5 h-5" />
               </button>
               <button
+                type="button"
+                aria-label={lang === 'zh' ? '批量选择网址' : 'Select multiple sites'}
+                aria-pressed={batchMode}
+                title={lang === 'zh' ? '批量选择网址' : 'Select multiple sites'}
+                disabled={siteOrderBusy || (!batchMode && !selectedCategory?.items.length)}
+                onClick={toggleBatchMode}
+                className={`rounded-lg p-2 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 ${mutedTextClass} ${batchMode ? 'bg-accent/70' : ''}`}
+              >
+                <ListChecks aria-hidden="true" className="h-5 w-5" />
+              </button>
+              <button
                 onClick={handleDeleteCategory}
                 className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 title={t.deleteCategoryLabel}
@@ -1372,23 +1443,46 @@ export default function Categories() {
             </div>
           </motion.div>
 
+          {batchMode && (
+            <div className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 ${glassBorderClass} ${cardSecondaryTextClass}`} style={glassSurfaceStyle}>
+              <span role="status" className="text-sm font-semibold">{lang === 'zh' ? `已选 ${batchItems.length} 个网址` : `${batchItems.length} selected`}</span>
+              <div className="flex flex-wrap items-center gap-1">
+                <button type="button" className={selectionActionClass} disabled={!selectedCategory?.items.length || batchItems.length === selectedCategory.items.length} onClick={() => setBatchSelected(new Set(selectedCategory?.items.map(item => item.id)))}>{lang === 'zh' ? '全选' : 'Select all'}</button>
+                <button type="button" className={selectionActionClass} disabled={!batchItems.length} onClick={() => setBatchSelected(new Set())}>{lang === 'zh' ? '清空选择' : 'Clear selection'}</button>
+                <button type="button" className={selectionActionClass} disabled={!batchItems.length || !batchDestinations.length} onClick={() => openBatchAction('move')}>{lang === 'zh' ? '移动分类' : 'Move to category'}</button>
+                <button type="button" className={selectionActionClass} disabled={!batchItems.length} onClick={() => openBatchAction('delete')}>{lang === 'zh' ? '删除所选' : 'Delete selected'}</button>
+              </div>
+            </div>
+          )}
+
           {/* Links Grid */}
           <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-3 md:gap-4">
-            {selectedCategory?.items.map((item, index) => (
+            {selectedCategory?.items.map((item, index) => {
+              const selected = batchMode && batchSelected.has(item.id);
+              return (
               <motion.div
                 key={item.id}
                 layout={reduceMotion ? false : 'position'}
                 initial={reduceMotion ? false : { opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.4 + index * 0.05, duration: 0.3, layout: { duration: 0.2, ease: 'easeOut' } }}
-                whileHover={reduceMotion || draggedSiteId ? undefined : { scale: 1.02, y: -3 }}
-                whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                whileHover={reduceMotion || draggedSiteId || batchMode ? undefined : { scale: 1.02, y: -3 }}
+                whileTap={reduceMotion || batchMode ? undefined : { scale: 0.98 }}
                 data-card
                 data-site-id={item.id}
                 onClick={() => setActiveCardId(item.id)}
-                style={draggedSiteId === item.id ? { ...glassSurfaceStyle, borderColor: 'transparent', x: dragX, y: dragY } : glassSurfaceStyle}
-                className={`group box-border flex min-h-[136px] cursor-pointer flex-col justify-between rounded-xl border p-3 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none md:min-h-[200px] md:p-5 ${glassBorderClass} ${glassHoverClass} ${draggedSiteId === item.id ? 'relative z-10 shadow-xl' : ''}`}
+                style={draggedSiteId === item.id ? { ...glassSurfaceStyle, borderColor: 'transparent', x: dragX, y: dragY } : selected ? topGlassSurfaceStyle : glassSurfaceStyle}
+                className={`group relative box-border flex min-h-[136px] min-w-0 cursor-pointer flex-col justify-between rounded-xl border p-3 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none md:min-h-[200px] md:p-5 ${selected ? selectedSiteSurfaceClass : `${glassBorderClass} ${glassHoverClass}`} ${draggedSiteId === item.id ? 'z-10 shadow-xl' : ''}`}
               >
+                {batchMode && (
+                  <button type="button" aria-label={item.name} aria-pressed={selected}
+                    onClick={event => { event.stopPropagation(); toggleBatchSite(item.id); }}
+                    className="absolute inset-0 z-10 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    {selected && <span aria-hidden="true" className={`absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full border md:right-5 md:top-5 ${selectedSiteBadgeClass}`}>
+                      <Check className="h-3 w-3" />
+                    </span>}
+                  </button>
+                )}
                 <div>
                   <div className="flex justify-between items-start mb-2 md:mb-3">
                     <div className={`h-8 w-8 sm:h-9 sm:w-9 md:w-12 md:h-12 rounded-lg border flex items-center justify-center overflow-hidden p-1.5 md:p-2 flex-shrink-0 ${
@@ -1398,7 +1492,7 @@ export default function Categories() {
                     }`}>
                       <SiteFavicon item={item} showFavicon={showFavicons} />
                     </div>
-                    <div className={`ml-auto flex gap-0.5 transition-opacity motion-reduce:transition-none [@media(hover:none)]:opacity-100 ${activeCardId === item.id || draggedSiteId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}>
+                    {!batchMode && <div className={`ml-auto flex gap-0.5 transition-opacity motion-reduce:transition-none [@media(hover:none)]:opacity-100 ${activeCardId === item.id || draggedSiteId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}>
                     {selectedCategory.items.length > 1 && <button
                       type="button"
                       disabled={siteOrderBusy}
@@ -1447,18 +1541,18 @@ export default function Categories() {
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                    </div>
+                    </div>}
                   </div>
                   <h3 className={`mb-1 truncate text-sm font-semibold md:text-lg ${cardPrimaryTextClass}`} title={item.name}>{item.name}</h3>
                   <p className={`mb-2 break-words text-xs leading-relaxed md:mb-4 md:text-sm ${cardSecondaryTextClass}`} title={item.description}>{item.description}</p>
                 </div>
-                <div className="flex items-center justify-between mt-1 md:mt-2">
-                  <span className={`max-w-[70%] truncate rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${
+                <div className="mt-1 flex min-w-0 items-center justify-between gap-2 md:mt-2">
+                  <span className={`min-w-0 truncate rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${
                     hasWallpaper && useDarkGlassSurface ? 'bg-white/10 text-white/65' : 'bg-gray-100 text-gray-500 dark:bg-zinc-700 dark:text-gray-400'
                   }`} title={new URL(item.url).hostname}>
                     {new URL(item.url).hostname}
                   </span>
-                  <button
+                  {!batchMode && <button
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -1476,13 +1570,14 @@ export default function Categories() {
                     title={t.copyLink}
                   >
                     <Copy className="w-3.5 h-3.5" />
-                  </button>
+                  </button>}
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
 
             {/* Add New Link Placeholder — always visible */}
-            <button
+            {!batchMode && <button
               onClick={startAddNew}
               data-onboarding="add-site"
               style={reducedFillSurfaceStyle ?? glassSurfaceStyle}
@@ -1493,7 +1588,7 @@ export default function Categories() {
               </div>
               <span className="font-semibold text-sm md:text-base">{t.addNewSite}</span>
               <span className={`mt-0.5 hidden text-xs md:mt-1 md:text-sm sm:block ${cardSecondaryTextClass}`}>{t.configureHint}</span>
-            </button>
+            </button>}
           </div>
 
           {/* Edit Category Form */}
@@ -1502,6 +1597,42 @@ export default function Categories() {
         </motion.section>
       </div>
     </main>
+
+    <dialog ref={batchDialog} aria-labelledby="batch-site-title"
+      onClose={() => setBatchAction(null)}
+      onCancel={event => { if (batchOperation.current) event.preventDefault(); }}
+      onClick={event => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (!batchOperation.current && event.target === event.currentTarget &&
+          (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) event.currentTarget.close();
+      }}
+      className="dash-scrollbar m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-md overflow-auto rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-2xl backdrop:bg-black/45 sm:p-6">
+      <form onSubmit={event => { event.preventDefault(); void confirmBatchAction(); }} className="space-y-4">
+        <h2 id="batch-site-title" className="text-lg font-semibold">{batchAction === 'move'
+          ? (lang === 'zh' ? '移动所选网址' : 'Move selected sites')
+          : (lang === 'zh' ? '删除所选网址' : 'Delete selected sites')}</h2>
+        {batchAction === 'move' ? (
+          <label className="block space-y-1.5">
+            <span className="block text-sm font-semibold">{lang === 'zh' ? '目标分类' : 'Destination category'}</span>
+            <select value={batchDestination} onChange={event => setBatchDestination(event.target.value)} disabled={batchBusy}
+              className="w-full rounded-lg border border-border bg-muted px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              {batchDestinations.map(category => <option key={category.id} value={category.id}>{category.title}</option>)}
+            </select>
+          </label>
+        ) : <p className="text-sm leading-relaxed text-muted-foreground">{lang === 'zh'
+          ? `将删除 ${batchItems.length} 个网址。此操作无法撤销。`
+          : `${batchItems.length} sites will be deleted. This cannot be undone.`}</p>}
+        <footer className="flex flex-wrap justify-end gap-2">
+          <button autoFocus type="button" disabled={batchBusy} onClick={() => batchDialog.current?.close()} className={`${selectionActionClass} min-h-10 px-4 text-sm`}>{t.cancel}</button>
+          <button type="submit" disabled={batchBusy || !batchItems.length || (batchAction === 'move' && !batchDestination)}
+            className={`min-h-10 px-4 text-sm font-medium ${batchAction === 'delete'
+              ? 'rounded-lg bg-destructive text-white transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50'
+              : primaryButtonClass}`}>
+            {batchBusy ? (lang === 'zh' ? '处理中…' : 'Working…') : batchAction === 'move' ? (lang === 'zh' ? '确认移动' : 'Move sites') : (lang === 'zh' ? '确认删除' : 'Delete sites')}
+          </button>
+        </footer>
+      </form>
+    </dialog>
 
     {/* Create Category Modal */}
     {isCreatingCategory && (
@@ -1787,9 +1918,7 @@ export default function Categories() {
                     type="button"
                     onClick={() => setShareSelectedIds((current) => toggleSetValue(current, item.id))}
                     className={`flex min-h-[88px] items-center gap-3 rounded-lg border py-3 pl-3 pr-3.5 text-left transition ${
-                      selected
-                        ? hasWallpaper ? (useDarkGlassSurface ? 'border-white/30 bg-white/12 shadow-sm' : 'border-white/65 bg-white/45 shadow-sm') : 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
-                        : modalItemClass
+                      selected ? selectedSiteSurfaceClass : modalItemClass
                     }`}
                   >
                     <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
@@ -1800,7 +1929,7 @@ export default function Categories() {
                       <p className="truncate text-xs tracking-wide text-gray-500 dark:text-gray-400">{item.description || hostnameFor(item.url)}</p>
                     </div>
                     <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${
-                      selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-gray-300 dark:border-zinc-500'
+                      selected ? selectedSiteBadgeClass : 'border-gray-300 dark:border-zinc-500'
                     }`}>
                       {selected && <Check className="h-3 w-3" />}
                     </span>
@@ -1856,6 +1985,7 @@ export default function Categories() {
       labelClass={modalLabelClass}
       primaryClass={primaryButtonClass}
       darkSurface={useDarkGlassSurface}
+      toastVisible={Boolean(toast)}
       uploadSurfaceStyle={reducedFillSurfaceStyle ?? glassSurfaceStyle}
       uploadCardClass={addActionCardClass}
       uploadIconClass={addActionIconClass}
@@ -1955,10 +2085,10 @@ export default function Categories() {
               </div>}
 
               {loadedShare.links.length > 0 && <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-end gap-x-2 text-sm sm:gap-x-4">
+                <div className={`flex flex-wrap items-center justify-end gap-x-2 text-sm sm:gap-x-4 ${cardSecondaryTextClass}`}>
                   <button ref={importSearchButton} type="button" aria-label={lang === 'zh' ? '筛选导入网址' : 'Filter import sites'} aria-expanded={importSearchOpen} aria-controls="import-site-search" onClick={() => importSearchOpen ? closeImportSearch() : setImportSearchOpen(true)} className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none ${importSearchOpen ? 'bg-accent/60' : ''}`}><Search aria-hidden="true" className="h-4 w-4" /></button>
-                  <button type="button" className="min-h-9 rounded px-2 text-xs font-semibold hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setImportSelectedIds(current => new Set([...current, ...filteredImportLinks.map(item => item.id)]))}>{lang === 'zh' ? '全选' : 'Select all'}</button>
-                  <button type="button" className="min-h-9 rounded px-2 text-xs font-semibold hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setImportSelectedIds(new Set())}>{lang === 'zh' ? '清空选择' : 'Clear selection'}</button>
+                  <button type="button" className={selectionActionClass} onClick={() => setImportSelectedIds(current => new Set([...current, ...filteredImportLinks.map(item => item.id)]))}>{lang === 'zh' ? '全选' : 'Select all'}</button>
+                  <button type="button" className={selectionActionClass} onClick={() => setImportSelectedIds(new Set())}>{lang === 'zh' ? '清空选择' : 'Clear selection'}</button>
                 </div>
                 <div id="import-site-search" hidden={!importSearchOpen}>
                   {importSearchOpen && <input autoFocus type="search" aria-label={lang === 'zh' ? '搜索网站名称或网址' : 'Search site names or URLs'} placeholder={lang === 'zh' ? '搜索网站名称或网址' : 'Search site names or URLs'} value={importFilter} onChange={event => { setImportFilter(event.target.value); setImportPage(0); }} onKeyDown={event => {
@@ -1981,9 +2111,7 @@ export default function Categories() {
                       aria-pressed={selected}
                       onClick={() => setImportSelectedIds((current) => toggleSetValue(current, item.id))}
                       className={`flex h-[var(--import-row-height)] min-w-0 items-center gap-3 rounded-lg border py-3 pl-3 pr-3.5 text-left transition ${
-                        selected
-                          ? hasWallpaper ? (useDarkGlassSurface ? 'border-white/30 bg-white/12 shadow-sm' : 'border-white/65 bg-white/45 shadow-sm') : 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
-                        : modalItemClass
+                        selected ? selectedSiteSurfaceClass : modalItemClass
                       }`}
                     >
                       <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
@@ -1994,7 +2122,7 @@ export default function Categories() {
                         <p className="truncate text-xs tracking-wide text-gray-500 dark:text-gray-400">{item.description || hostnameFor(item.url)}</p>
                       </div>
                       <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${
-                        selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-gray-300 dark:border-zinc-500'
+                        selected ? selectedSiteBadgeClass : 'border-gray-300 dark:border-zinc-500'
                       }`}>
                         {selected && <Check className="h-3 w-3" />}
                       </span>

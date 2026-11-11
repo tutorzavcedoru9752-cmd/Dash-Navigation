@@ -879,7 +879,7 @@ export default function Home() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4 + categoryIndex * 0.1, duration: 0.5, ease: "easeOut" }}
-                  className="space-y-4 scroll-mt-16 md:min-h-[140px]"
+                  className="space-y-4 scroll-mt-16"
                 >
                   <motion.div
                     initial={{ opacity: 0, x: -20 }}
@@ -899,6 +899,7 @@ export default function Home() {
                         hasWallpaper ? `${categoryTone === 'light' ? 'text-white hover:bg-white/10' : 'text-gray-900 hover:bg-white/40'}` : 'hover:bg-gray-100 dark:hover:bg-zinc-800'
                       }`}
                       aria-label={collapsedCategories.has(category.id) ? "Expand category" : "Collapse category"}
+                      aria-expanded={!collapsedCategories.has(category.id)}
                     >
                       {collapsedCategories.has(category.id) ? (
                         <ChevronDown className={`w-5 h-5 ${hasWallpaper ? '' : 'text-gray-600 dark:text-gray-400'}`} />

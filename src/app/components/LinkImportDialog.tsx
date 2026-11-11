@@ -10,6 +10,7 @@ type Props = {
   labelClass: string;
   primaryClass: string;
   darkSurface: boolean;
+  toastVisible: boolean;
   uploadSurfaceStyle?: CSSProperties;
   uploadCardClass: string;
   uploadIconClass: string;
@@ -128,7 +129,7 @@ export default function LinkImportDialog(props: Props) {
 
   const close = () => { if (!busy) props.onClose(); };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-4 pb-28">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${props.toastVisible ? 'py-[min(6rem,18dvh)]' : 'py-4'}`}>
       <button type="button" tabIndex={-1} aria-label={zh ? '关闭导入窗口' : 'Close import dialog'} disabled={busy} onClick={close} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <section ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="link-import-title" aria-busy={busy} style={{ ...props.surfaceStyle, colorScheme: props.darkSurface || isDark ? 'dark' : 'light' }} className={`relative flex max-h-full w-full max-w-2xl flex-col rounded-2xl border shadow-2xl outline-none ${source ? 'h-[min(90dvh,52rem)]' : ''} ${props.surfaceClass} ${primaryText}`}>
         <header className="flex shrink-0 items-center gap-2 p-4 sm:p-6">
@@ -150,17 +151,30 @@ export default function LinkImportDialog(props: Props) {
                   <dialog ref={helpDialog} aria-labelledby="bookmark-help-title" aria-describedby="bookmark-help-description" onClose={() => helpButton.current?.focus()} onClick={event => {
                     const { left, right, top, bottom } = event.currentTarget.getBoundingClientRect();
                     if (event.target === event.currentTarget && (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom)) event.currentTarget.close();
-                  }} className="m-auto max-h-[85dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-border bg-background p-5 text-foreground shadow-xl backdrop:bg-black/50 sm:p-6">
-                    <div className="space-y-4">
-                    <h2 id="bookmark-help-title" className="text-lg font-semibold">{zh ? '如何导出书签' : 'How to export bookmarks'}</h2>
-                    <p id="bookmark-help-description" className="text-sm text-muted-foreground">{zh ? '在电脑上的浏览器中导出 HTML 文件，再回到这里上传。' : 'Export an HTML file from your desktop browser, then upload it here.'}</p>
-                    <dl className="space-y-3 text-sm leading-relaxed">
-                      <div><dt className="font-semibold">Chrome</dt><dd className="text-muted-foreground">{zh ? '菜单 ⋮ → 书签和清单 → 书签管理器 → 菜单 ⋮ → 导出书签' : 'Menu ⋮ → Bookmarks and lists → Bookmark Manager → Menu ⋮ → Export bookmarks'}</dd></div>
-                      <div><dt className="font-semibold">Edge</dt><dd className="text-muted-foreground">{zh ? '打开 edge://favorites → 菜单 … → 导出收藏夹' : 'Open edge://favorites → Menu … → Export favorites'}</dd></div>
-                      <div><dt className="font-semibold">Firefox</dt><dd className="text-muted-foreground">{zh ? '书签 → 管理书签 → 导入和备份 → 导出书签到 HTML' : 'Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML'}</dd></div>
-                    </dl>
-                    <div className="flex justify-end"><button type="button" onClick={() => helpDialog.current?.close()} className={`${buttonClass} bg-primary text-primary-foreground hover:opacity-90`}>{zh ? '知道了' : 'Got it'}</button></div>
+                  }} className="dash-scrollbar m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-2xl backdrop:bg-black/45 sm:p-6">
+                    <header className="mb-4 space-y-1.5">
+                      <h2 id="bookmark-help-title" className="flex items-center gap-2 text-lg font-semibold"><CircleHelp aria-hidden="true" className="h-5 w-5 shrink-0" />{zh ? '如何导出书签' : 'How to export bookmarks'}</h2>
+                      <p id="bookmark-help-description" className="text-sm leading-relaxed text-muted-foreground">{zh ? '在电脑上导出 HTML 书签文件，然后回到 Dash 上传。' : 'Export your bookmarks as an HTML file on your computer, then upload it to Dash.'}</p>
+                    </header>
+                    <div className="divide-y divide-border rounded-xl border border-border bg-muted/40">
+                      {(zh ? [
+                        ['Chrome', '菜单 ⋮ → 书签和清单 → 书签管理器', '在管理器的 ⋮ 菜单中选择「导出书签」。'],
+                        ['Edge', '打开 edge://favorites', '在 … 菜单中选择「导出收藏夹」。'],
+                        ['Firefox', '书签 → 管理书签', '打开「导入和备份」，选择「导出书签到 HTML」。'],
+                      ] : [
+                        ['Chrome', 'Menu ⋮ → Bookmarks and lists → Bookmark Manager', 'In Bookmark Manager, open ⋮ and choose Export bookmarks.'],
+                        ['Edge', 'Open edge://favorites', 'Open the … menu and choose Export favorites.'],
+                        ['Firefox', 'Bookmarks → Manage bookmarks', 'Open Import and Backup and choose Export Bookmarks to HTML.'],
+                      ]).map(([browser, open, exportStep]) => (
+                        <div key={browser} className="space-y-1.5 px-4 py-3">
+                          <h3 className="text-sm font-semibold">{browser}</h3>
+                          <ol className="list-decimal space-y-0.5 ps-5 text-sm leading-relaxed text-muted-foreground">
+                            <li>{open}</li><li>{exportStep}</li>
+                          </ol>
+                        </div>
+                      ))}
                     </div>
+                    <footer className="mt-4 flex justify-end"><button type="button" onClick={() => helpDialog.current?.close()} className={`${buttonClass} ${props.primaryClass}`}>{zh ? '知道了' : 'Got it'}</button></footer>
                   </dialog>
               </div>
               <input ref={fileInput} type="file" aria-labelledby="link-import-file-label" accept=".html,.htm,text/html" className="sr-only" tabIndex={-1} onChange={event => { const next = event.target.files?.[0]; event.target.value = ''; chooseFile(next); }} />

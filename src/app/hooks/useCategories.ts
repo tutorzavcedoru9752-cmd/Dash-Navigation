@@ -300,7 +300,7 @@ function useCategoriesState() {
   const categoriesRef = useRef(categories);
   const currentUserIdRef = useRef<string | null>(null);
   const lastSyncAtRef = useRef(0);
-  // Odd revisions are in-flight writes. Reads started before or during them may contain stale ranks.
+  // Odd revisions are in-flight site writes. Reads started before or during them may be stale.
   const orderWriteRevision = useRef(0);
 
   useEffect(() => {
@@ -599,6 +599,52 @@ function useCategoriesState() {
       replaceCategories(previousCategories);
       console.error('Error deleting item:', err);
       setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const changeSelectedSites = async (categoryId: string, ids: string[], destinationId?: string) => {
+    if (blockPreviewWrite() || orderWriteRevision.current % 2 !== 0) return false;
+    const userId = currentUserIdRef.current;
+    const source = categoriesRef.current.find(category => category.id === categoryId);
+    const destination = categoriesRef.current.find(category => category.id === destinationId);
+    if (!userId || !source || (destinationId && (!destination || destinationId === categoryId))) return false;
+    const selectedIds = new Set(ids);
+    const selected = source.items.filter(item => selectedIds.has(item.id));
+    if (!selected.length) return false;
+    const order = destination ? nextLinkOrder(destination.items) : 0;
+    const changedIds = new Set<string>();
+    orderWriteRevision.current += 1;
+    try {
+      const ownerId = await getCurrentUserId();
+      if (ownerId !== userId) return false;
+      // Keep each URL within gateway limits when a large category is selected.
+      for (let offset = 0; offset < selected.length; offset += 100) {
+        const batch = selected.slice(offset, offset + 100).map(item => item.id);
+        const links = supabase.from('nav_links');
+        const change = destination
+          ? links.update({ category_id: destination.id, order_index: order, updated_at: new Date().toISOString() })
+          : links.delete();
+        const { data, error: writeError } = await change
+          .eq('owner_id', userId).eq('category_id', categoryId).in('id', batch).select('id');
+        for (const row of data ?? []) changedIds.add(row.id);
+        if (writeError || data?.length !== batch.length) return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('Error changing selected sites:', err);
+      return false;
+    } finally {
+      orderWriteRevision.current += 1;
+      if (currentUserIdRef.current === userId) {
+        const moved = selected.filter(item => changedIds.has(item.id)).map(item => ({ ...item, order }));
+        moved.sort((a, b) => a.name.localeCompare(b.name));
+        if (changedIds.size) replaceCategories(categoriesRef.current.map(category => {
+          if (category.id === categoryId) return { ...category, items: category.items.filter(item => !changedIds.has(item.id)) };
+          if (category.id === destinationId) return { ...category, items: [...category.items, ...moved] };
+          return category;
+        }));
+        if (changedIds.size !== selected.length) await fetchCategories({ force: true, showLoading: false });
+      }
     }
   };
 
@@ -945,6 +991,7 @@ function useCategoriesState() {
     reorderItems,
     updateItem,
     deleteItem,
+    changeSelectedSites,
     deleteCategory,
     createCategory,
     createShare,
