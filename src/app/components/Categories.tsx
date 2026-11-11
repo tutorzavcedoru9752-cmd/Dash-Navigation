@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useRef, type CSSProperties } from 'react';
+import { useState, useEffect, useContext, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link as RouterLink } from 'react-router';
 import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, Eye, EyeOff, Mail, Share2, Download, Check, KeyRound, Clock3, UserRound, RefreshCw } from 'lucide-react';
 import { fetchFaviconData, useCategories, type LinkItem, type NavShare } from '../hooks/useCategories';
@@ -11,6 +11,7 @@ import { readUiDraft, removeUiDraft, UI_DRAFT_SCOPES, writeUiDraft } from '../li
 import LinkImportDialog from './LinkImportDialog';
 import { MAX_BOOKMARK_IMPORT, bookmarkUrlKey, resolveBookmarkFavicons, type BrowserBookmark } from '../lib/bookmarks';
 import { NavigationSkeleton } from './NavigationSkeleton';
+import { GripVertical } from 'lucide-react';
 
 const ui = {
   en: {
@@ -380,6 +381,7 @@ export default function Categories() {
     error,
     addItem,
     updateItem,
+    reorderItems,
     deleteItem,
     deleteCategory,
     createCategory,
@@ -406,6 +408,10 @@ export default function Categories() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredDraftOwnerRef = useRef<string | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const siteDrag = useRef<{ id: string; pointer: number; x: number; y: number; target: string | null } | null>(null);
+  const [siteDropTarget, setSiteDropTarget] = useState<string | null>(null);
+  const sortingSites = useRef(false);
+  const [siteOrderBusy, setSiteOrderBusy] = useState(false);
   const [isSharingCategory, setIsSharingCategory] = useState(false);
   const [shareSelectedIds, setShareSelectedIds] = useState<Set<string>>(new Set());
   const [shareResult, setShareResult] = useState<{ code: string; expiresAt: string; sharerName: string; sharerAvatarUrl?: string } | null>(null);
@@ -417,8 +423,12 @@ export default function Categories() {
   const [importCategoryId, setImportCategoryId] = useState('');
   const [importNewCategory, setImportNewCategory] = useState({ id: '', title: '', description: '' });
   const [importPage, setImportPage] = useState(0);
+  const [importPageSize, setImportPageSize] = useState(1);
+  const [importGrid, setImportGrid] = useState<HTMLDivElement | null>(null);
   const [importFilter, setImportFilter] = useState('');
   const filteredImportLinks = loadedShare?.links.filter(item => `${item.name} ${item.url} ${item.description}`.toLocaleLowerCase().includes(importFilter.toLocaleLowerCase())) ?? [];
+  const importPageCount = Math.max(1, Math.ceil(filteredImportLinks.length / importPageSize));
+  const currentImportPage = Math.min(importPage, importPageCount - 1);
   const [wallpaperContrast, setWallpaperContrast] = useState<WallpaperContrastSample | null>(null);
   const selectedCategory = categories.find(c => c.id === selectedCategoryId);
   const hasReachedCategoryLimit = summary.plan === 'free' && summary.categoryCount >= FREE_CATEGORY_LIMIT;
@@ -510,12 +520,37 @@ export default function Categories() {
   const formFieldClass = hasWallpaper
     ? `${useDarkGlassSurface ? 'bg-white/10 text-white placeholder:text-white/55 focus:ring-white/30' : 'bg-white/55 text-gray-900 placeholder:text-gray-600 focus:ring-gray-400/70'} border border-white/35 shadow-sm`
     : 'bg-gray-100 dark:bg-zinc-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-gray-300 dark:focus:ring-zinc-600';
+  const siteFieldClass = `${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`;
   const modalItemClass = hasWallpaper
     ? `${useDarkGlassSurface ? 'border-white/20 bg-white/8 hover:bg-white/14' : 'border-white/40 bg-white/35 hover:bg-white/55'}`
     : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500';
   const modalLabelClass = hasWallpaper
     ? useDarkGlassSurface ? 'text-white/80' : 'text-gray-700'
     : 'text-gray-700 dark:text-gray-300';
+
+  useEffect(() => {
+    const body = importGrid?.closest<HTMLElement>('[data-import-body]');
+    if (!importGrid || !body) return;
+    const measure = () => {
+      const style = getComputedStyle(importGrid);
+      const columns = Math.max(1, style.gridTemplateColumns.trim().split(/\s+/).length);
+      const rowHeight = parseFloat(style.getPropertyValue('--import-row-height')) || 88;
+      const gap = parseFloat(style.rowGap) || 0;
+      const gridTop = importGrid.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop;
+      const rows = Math.max(1, Math.floor((body.clientHeight - gridTop + gap + 0.5) / (rowHeight + gap)));
+      setImportPageSize(columns * rows);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(body);
+    if (importGrid.previousElementSibling) observer.observe(importGrid.previousElementSibling);
+    window.addEventListener('resize', measure);
+    measure();
+    return () => { observer.disconnect(); window.removeEventListener('resize', measure); };
+  }, [importGrid]);
+
+  useEffect(() => {
+    importGrid?.closest('[data-import-body]')?.scrollTo({ top: 0 });
+  }, [currentImportPage, importGrid]);
 
   useEffect(() => {
     if (!hasWallpaper || !wallpaperUrl) {
@@ -1068,6 +1103,36 @@ export default function Categories() {
     finishToast(t.toastReordered);
   };
 
+  const saveSiteOrder = async (sourceId: string, targetId: string) => {
+    if (!selectedCategory || sortingSites.current || sourceId === targetId) return;
+    if (isPreview) { requestLogin('save'); return; }
+    sortingSites.current = true;
+    setSiteOrderBusy(true);
+    startToast(t.toastSaving);
+    try {
+      const saved = await reorderItems(selectedCategory.id, sourceId, targetId);
+      if (saved) finishToast(t.toastReordered);
+      else finishToast(lang === 'zh' ? '未能保存网址顺序，请重试。' : 'Could not save site order. Please try again.', 'error');
+    } finally {
+      sortingSites.current = false;
+      setSiteOrderBusy(false);
+    }
+  };
+
+  const trackSiteDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = siteDrag.current;
+    if (!drag || drag.pointer !== event.pointerId) return;
+    const moved = Math.hypot(event.clientX - drag.x, event.clientY - drag.y) >= 5;
+    const target = moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-site-id]')?.dataset.siteId : null;
+    drag.target = target && target !== drag.id ? target : null;
+    setSiteDropTarget(drag.target);
+  };
+
+  const clearSiteDrag = () => {
+    siteDrag.current = null;
+    setSiteDropTarget(null);
+  };
+
   const moveCategoryUp = async (index: number) => {
     if (index === 0) return;
     const newCategories = [...categories];
@@ -1280,20 +1345,51 @@ export default function Categories() {
                 whileHover={{ scale: 1.02, y: -3 }}
                 whileTap={{ scale: 0.98 }}
                 data-card
+                data-site-id={item.id}
                 onClick={() => setActiveCardId(item.id)}
                 style={glassSurfaceStyle}
-                className={`group box-border flex min-h-[136px] cursor-pointer flex-col justify-between rounded-xl border p-3 transition-all duration-200 md:min-h-[200px] md:p-5 ${glassBorderClass} ${glassHoverClass}`}
+                className={`group box-border flex min-h-[136px] cursor-pointer flex-col justify-between rounded-xl border p-3 transition-all duration-200 md:min-h-[200px] md:p-5 ${glassBorderClass} ${glassHoverClass} ${siteDropTarget === item.id ? 'ring-2 ring-primary' : ''}`}
               >
                 <div>
                   <div className="flex justify-between items-start mb-2 md:mb-3">
-                    <div className={`w-9 h-9 md:w-12 md:h-12 rounded-lg border flex items-center justify-center overflow-hidden p-1.5 md:p-2 flex-shrink-0 ${
+                    <div className={`h-8 w-8 sm:h-9 sm:w-9 md:w-12 md:h-12 rounded-lg border flex items-center justify-center overflow-hidden p-1.5 md:p-2 flex-shrink-0 ${
                       hasWallpaper
                         ? 'border-white/55 bg-white/70 shadow-sm dark:border-white/10 dark:bg-white/10'
                         : 'bg-white dark:bg-zinc-700 border-gray-200 dark:border-zinc-600'
                     }`}>
                       <SiteFavicon item={item} showFavicon={showFavicons} />
                     </div>
-                    <div className={`flex gap-0.5 transition-opacity ${activeCardId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                    {selectedCategory.items.length > 1 && <button
+                      type="button"
+                      disabled={siteOrderBusy}
+                      aria-label={lang === 'zh' ? `调整 ${item.name} 的顺序，可拖拽或使用方向键` : `Reorder ${item.name} by dragging or using arrow keys`}
+                      title={lang === 'zh' ? '拖拽排序 · 方向键也可移动' : 'Drag to reorder · Arrow keys also work'}
+                      onClick={event => event.stopPropagation()}
+                      onPointerDown={event => {
+                        if (event.button !== 0 || !event.isPrimary) return;
+                        siteDrag.current = { id: item.id, pointer: event.pointerId, x: event.clientX, y: event.clientY, target: null };
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                      }}
+                      onPointerMove={trackSiteDrag}
+                      onPointerUp={event => {
+                        if (siteDrag.current?.pointer !== event.pointerId) return;
+                        trackSiteDrag(event);
+                        const target = siteDrag.current.target;
+                        clearSiteDrag();
+                        if (target) void saveSiteOrder(item.id, target);
+                      }}
+                      onPointerCancel={clearSiteDrag}
+                      onLostPointerCapture={clearSiteDrag}
+                      onKeyDown={event => {
+                        const direction = ['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : ['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : 0;
+                        if (!direction) return;
+                        event.preventDefault();
+                        const target = selectedCategory.items[index + direction];
+                        if (target) void saveSiteOrder(item.id, target.id);
+                      }}
+                      className="ml-auto flex h-8 w-6 shrink-0 touch-none items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 enabled:cursor-grab sm:w-7"
+                    ><GripVertical aria-hidden="true" className="h-4 w-4" /></button>}
+                    <div className={`flex gap-0.5 transition-opacity ${activeCardId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}>
                       <button
                         onClick={() => startEdit(item)}
                         className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-md transition-colors text-gray-700 dark:text-gray-300"
@@ -1557,7 +1653,7 @@ export default function Categories() {
               <div className="space-y-1.5">
                 <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.siteTitle}</label>
                 <input
-                  className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
+                  className={siteFieldClass}
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -1568,7 +1664,7 @@ export default function Categories() {
               <div className="space-y-1.5">
                 <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.destinationUrl}</label>
                 <input
-                  className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
+                  className={siteFieldClass}
                   type="url"
                   value={formData.url}
                   onChange={(e) => setFormData({ ...formData, url: e.target.value })}
@@ -1587,7 +1683,7 @@ export default function Categories() {
             <div className="space-y-1.5">
               <label className={`text-xs font-semibold uppercase px-1 tracking-wide ${modalLabelClass}`}>{t.description}</label>
               <textarea
-                className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`}
+                className={siteFieldClass}
                 rows={2}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -1715,7 +1811,7 @@ export default function Categories() {
     {isChoosingImport && <LinkImportDialog
       surfaceStyle={topGlassSurfaceStyle}
       surfaceClass={modalSurfaceClass}
-      fieldClass={formFieldClass}
+      fieldClass={siteFieldClass}
       labelClass={modalLabelClass}
       primaryClass={primaryButtonClass}
       darkSurface={useDarkGlassSurface}
@@ -1728,67 +1824,16 @@ export default function Categories() {
       onReadBookmarks={handleReadBookmarks}
       onImport={handleImportSharedLinks}
       selectedCount={importSelectedIds.size}
+      pagination={filteredImportLinks.length > 0 ? <div role="navigation" aria-label={lang === 'zh' ? '导入网址分页' : 'Import pagination'} className="mb-2 flex items-center justify-between gap-3 text-sm">
+                <button type="button" aria-label={lang === 'zh' ? '上一页' : 'Previous'} title={lang === 'zh' ? '上一页' : 'Previous'} disabled={currentImportPage === 0} onClick={() => setImportPage(currentImportPage - 1)} className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"><ChevronLeft aria-hidden="true" className="h-5 w-5" /></button>
+                <span>{currentImportPage + 1} / {importPageCount}</span>
+                <button type="button" aria-label={lang === 'zh' ? '下一页' : 'Next'} title={lang === 'zh' ? '下一页' : 'Next'} disabled={currentImportPage + 1 >= importPageCount} onClick={() => setImportPage(currentImportPage + 1)} className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"><ChevronRight aria-hidden="true" className="h-5 w-5" /></button>
+              </div> : null}
       notice={toast ? <OperationToast toast={toast} inline /> : null}
     >
           {loadedShare && (
-            <div className="space-y-5">
-              {loadedShare.code && <div className={`flex items-start justify-between gap-4 rounded-lg p-4 ${formFieldClass}`}>
-                <div className="min-w-0">
-                  <p className="font-semibold text-gray-900 dark:text-gray-100">{loadedShare.categoryTitle}</p>
-                  {loadedShare.categoryDescription && (
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{loadedShare.categoryDescription}</p>
-                  )}
-                </div>
-                <ShareAuthor name={loadedShare.sharerName} avatarUrl={loadedShare.sharerAvatarUrl} />
-              </div>}
-
-              {loadedShare.links.length > 0 && <div className="space-y-3">
-                <input aria-label={lang === 'zh' ? '筛选导入网址' : 'Filter import sites'} placeholder={lang === 'zh' ? '搜索网站名称或网址' : 'Search site names or URLs'} value={importFilter} onChange={event => { setImportFilter(event.target.value); setImportPage(0); }} className={`${formFieldClass} w-full rounded-lg p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring`} />
-                <div className="flex justify-end gap-4 text-sm">
-                  <button type="button" className="rounded px-1 py-1 focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setImportSelectedIds(current => new Set([...current, ...filteredImportLinks.map(item => item.id)]))}>{lang === 'zh' ? '全选' : 'Select all'}</button>
-                  <button type="button" className="rounded px-1 py-1 focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setImportSelectedIds(new Set())}>{lang === 'zh' ? '清空选择' : 'Clear selection'}</button>
-                </div>
-              </div>}
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {filteredImportLinks.slice(importPage * 40, (importPage + 1) * 40).map((item) => {
-                  const selected = importSelectedIds.has(item.id);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => setImportSelectedIds((current) => toggleSetValue(current, item.id))}
-                      className={`flex min-h-[88px] items-center gap-3 rounded-lg border py-3 pl-3 pr-3.5 text-left transition ${
-                        selected
-                          ? hasWallpaper ? (useDarkGlassSurface ? 'border-white/30 bg-white/12 shadow-sm' : 'border-white/65 bg-white/45 shadow-sm') : 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
-                        : modalItemClass
-                      }`}
-                    >
-                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
-                        <SiteFavicon item={item} showFavicon={showFavicons} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
-                        <p className="truncate text-xs tracking-wide text-gray-500 dark:text-gray-400">{item.description || hostnameFor(item.url)}</p>
-                      </div>
-                      <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${
-                        selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-gray-300 dark:border-zinc-500'
-                      }`}>
-                        {selected && <Check className="h-3 w-3" />}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {!filteredImportLinks.length && <p className={`py-6 text-center text-sm ${modalLabelClass}`}>{loadedShare.links.length ? (lang === 'zh' ? '没有匹配的网址。' : 'No matching sites.') : (lang === 'zh' ? '所有网址已处理，可点击“完成导入”。' : 'All sites have been processed. Choose Finish importing.')}</p>}
-              {filteredImportLinks.length > 40 && <div className="flex items-center justify-between gap-3 text-sm">
-                <button type="button" aria-label={lang === 'zh' ? '上一页' : 'Previous'} title={lang === 'zh' ? '上一页' : 'Previous'} disabled={importPage === 0} onClick={() => setImportPage(value => value - 1)} className="flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"><ChevronLeft aria-hidden="true" className="h-5 w-5" /></button>
-                <span>{importPage + 1} / {Math.ceil(filteredImportLinks.length / 40)}</span>
-                <button type="button" aria-label={lang === 'zh' ? '下一页' : 'Next'} title={lang === 'zh' ? '下一页' : 'Next'} disabled={(importPage + 1) * 40 >= filteredImportLinks.length} onClick={() => setImportPage(value => value + 1)} className="flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"><ChevronRight aria-hidden="true" className="h-5 w-5" /></button>
-              </div>}
-
+            <div className="space-y-4 sm:space-y-5">
+              <div className="space-y-3 sm:space-y-4">
               {loadedShare.links.length > 0 && <div className="space-y-3">
                 <p className={`text-xs font-semibold uppercase tracking-wide ${modalLabelClass}`}>{t.importTo}</p>
                 <div className="flex items-center gap-5 border-b border-gray-200 dark:border-zinc-700">
@@ -1859,6 +1904,59 @@ export default function Categories() {
                   </div>
                 )}
               </div>}
+              {loadedShare.code && <div className={`flex items-start justify-between gap-4 rounded-lg p-4 ${formFieldClass}`}>
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{loadedShare.categoryTitle}</p>
+                  {loadedShare.categoryDescription && (
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{loadedShare.categoryDescription}</p>
+                  )}
+                </div>
+                <ShareAuthor name={loadedShare.sharerName} avatarUrl={loadedShare.sharerAvatarUrl} />
+              </div>}
+
+              {loadedShare.links.length > 0 && <div className="space-y-3">
+                <input aria-label={lang === 'zh' ? '筛选导入网址' : 'Filter import sites'} placeholder={lang === 'zh' ? '搜索网站名称或网址' : 'Search site names or URLs'} value={importFilter} onChange={event => { setImportFilter(event.target.value); setImportPage(0); }} className={siteFieldClass} />
+                <div className="flex justify-end gap-4 text-sm">
+                  <button type="button" className="min-h-9 rounded px-2 text-xs font-semibold hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setImportSelectedIds(current => new Set([...current, ...filteredImportLinks.map(item => item.id)]))}>{lang === 'zh' ? '全选' : 'Select all'}</button>
+                  <button type="button" className="min-h-9 rounded px-2 text-xs font-semibold hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setImportSelectedIds(new Set())}>{lang === 'zh' ? '清空选择' : 'Clear selection'}</button>
+                </div>
+              </div>}
+
+              </div>
+              <div ref={setImportGrid} className="grid grid-cols-1 gap-2 [--import-row-height:72px] sm:grid-cols-2 sm:gap-3 sm:[--import-row-height:88px]">
+                {filteredImportLinks.slice(currentImportPage * importPageSize, (currentImportPage + 1) * importPageSize).map((item) => {
+                  const selected = importSelectedIds.has(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setImportSelectedIds((current) => toggleSetValue(current, item.id))}
+                      className={`flex h-[var(--import-row-height)] min-w-0 items-center gap-3 rounded-lg border py-3 pl-3 pr-3.5 text-left transition ${
+                        selected
+                          ? hasWallpaper ? (useDarkGlassSurface ? 'border-white/30 bg-white/12 shadow-sm' : 'border-white/65 bg-white/45 shadow-sm') : 'border-gray-900 bg-gray-50 shadow-sm dark:border-zinc-200 dark:bg-zinc-700'
+                        : modalItemClass
+                      }`}
+                    >
+                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-2 dark:border-zinc-600 dark:bg-zinc-700">
+                        <SiteFavicon item={item} showFavicon={showFavicons} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
+                        <p className="truncate text-xs tracking-wide text-gray-500 dark:text-gray-400">{item.description || hostnameFor(item.url)}</p>
+                      </div>
+                      <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${
+                        selected ? 'border-gray-900 bg-gray-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-gray-300 dark:border-zinc-500'
+                      }`}>
+                        {selected && <Check className="h-3 w-3" />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {!filteredImportLinks.length && <p className={`py-6 text-center text-sm ${modalLabelClass}`}>{loadedShare.links.length ? (lang === 'zh' ? '没有匹配的网址。' : 'No matching sites.') : (lang === 'zh' ? '所有网址已处理，可点击“完成导入”。' : 'All sites have been processed. Choose Finish importing.')}</p>}
+
             </div>
           )}
 

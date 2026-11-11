@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { Check, Download, Loader2, Plus, X } from 'lucide-react';
+import { Check, CircleHelp, Download, Loader2, Plus, X } from 'lucide-react';
 import { LangContext, ThemeContext } from '../App';
 import { MAX_BOOKMARK_FILE_BYTES, MAX_BOOKMARKS, parseBookmarkHtml, type BrowserBookmark } from '../lib/bookmarks';
 
@@ -21,6 +21,7 @@ type Props = {
   selectedCount: number;
   children: ReactNode;
   notice?: ReactNode;
+  pagination?: ReactNode;
 };
 
 export default function LinkImportDialog(props: Props) {
@@ -35,11 +36,12 @@ export default function LinkImportDialog(props: Props) {
   const [error, setError] = useState('');
   const panel = useRef<HTMLElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const helpDialog = useRef<HTMLDialogElement>(null);
+  const helpButton = useRef<HTMLButtonElement>(null);
   const operation = useRef(false);
   const mounted = useRef(true);
   const primaryText = props.darkSurface ? 'text-white' : 'text-gray-900 dark:text-gray-100';
   const mutedText = props.darkSurface ? 'text-white/80' : 'text-gray-700 dark:text-gray-300';
-  const controlClass = `${props.fieldClass} w-full min-w-0 rounded-lg p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors`;
   const buttonClass = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed';
 
   useEffect(() => {
@@ -65,6 +67,7 @@ export default function LinkImportDialog(props: Props) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (helpDialog.current?.open) return;
       const dialogs = document.querySelectorAll('[role="dialog"]');
       if (dialogs[dialogs.length - 1] !== panel.current) return;
       if (event.key === 'Escape' && !busy) { event.preventDefault(); props.onClose(); }
@@ -128,20 +131,40 @@ export default function LinkImportDialog(props: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" tabIndex={-1} aria-label={zh ? '关闭导入窗口' : 'Close import dialog'} disabled={busy} onClick={close} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <section ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="link-import-title" aria-busy={busy} style={{ ...props.surfaceStyle, colorScheme: props.darkSurface || isDark ? 'dark' : 'light' }} className={`relative flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border shadow-2xl outline-none ${props.surfaceClass} ${primaryText}`}>
-        <header className="flex shrink-0 items-center gap-2 px-6 pt-6 pb-6">
+      <section ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="link-import-title" aria-busy={busy} style={{ ...props.surfaceStyle, colorScheme: props.darkSurface || isDark ? 'dark' : 'light' }} className={`relative flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-2xl border shadow-2xl outline-none ${source ? 'h-[min(90dvh,52rem)]' : ''} ${props.surfaceClass} ${primaryText}`}>
+        <header className="flex shrink-0 items-center gap-2 p-4 sm:p-6">
           <Download className="h-5 w-5 shrink-0" />
           <h2 id="link-import-title" className="text-lg font-semibold">{zh ? '导入网址' : 'Import links'}</h2>
         </header>
-        <div data-import-body className="dash-scrollbar min-h-0 overflow-y-auto px-6">
+        <div data-import-body className={`dash-scrollbar min-h-0 overflow-y-auto px-4 sm:px-6 ${source ? 'flex-1' : ''}`}>
           {!source ? <form id="link-import-form" onSubmit={event => { event.preventDefault(); void advance(); }} className="space-y-4">
             <div className="space-y-1.5">
               <label htmlFor="link-import-code" className={`block px-1 text-xs font-semibold uppercase tracking-wide ${props.labelClass}`}>{zh ? '分享码' : 'Share code'}</label>
-              <input id="link-import-code" type="text" value={shareCode} maxLength={100} disabled={busy} onChange={event => { setShareCode(event.target.value.toUpperCase()); setFile(null); setError(''); }} placeholder={zh ? '输入分享码' : 'Enter a share code'} autoComplete="off" spellCheck={false} className={controlClass} />
+              <input id="link-import-code" type="text" value={shareCode} maxLength={100} disabled={busy} onChange={event => { setShareCode(event.target.value.toUpperCase()); setFile(null); setError(''); }} placeholder={zh ? '输入分享码' : 'Enter a share code'} autoComplete="off" spellCheck={false} className={props.fieldClass} />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="link-import-file" className={`block px-1 text-xs font-semibold uppercase tracking-wide ${props.labelClass}`}>{zh ? '浏览器收藏夹' : 'Browser bookmarks'}</label>
-              <input ref={fileInput} type="file" accept=".html,.htm,text/html" className="sr-only" tabIndex={-1} onChange={event => { const next = event.target.files?.[0]; event.target.value = ''; chooseFile(next); }} />
+              <div className="flex items-center gap-1">
+                <span id="link-import-file-label" className={`px-1 text-xs font-semibold uppercase tracking-wide ${props.labelClass}`}>{zh ? '浏览器收藏夹' : 'Browser bookmarks'}</span>
+                    <button ref={helpButton} type="button" disabled={busy} aria-haspopup="dialog" aria-label={zh ? '如何导出书签' : 'How to export bookmarks'} onClick={() => helpDialog.current?.showModal()} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <CircleHelp aria-hidden="true" className="h-4 w-4" />
+                    </button>
+                  <dialog ref={helpDialog} aria-labelledby="bookmark-help-title" aria-describedby="bookmark-help-description" onClose={() => helpButton.current?.focus()} onClick={event => {
+                    const { left, right, top, bottom } = event.currentTarget.getBoundingClientRect();
+                    if (event.target === event.currentTarget && (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom)) event.currentTarget.close();
+                  }} className="m-auto max-h-[85dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-border bg-background p-5 text-foreground shadow-xl backdrop:bg-black/50 sm:p-6">
+                    <div className="space-y-4">
+                    <h2 id="bookmark-help-title" className="text-lg font-semibold">{zh ? '如何导出书签' : 'How to export bookmarks'}</h2>
+                    <p id="bookmark-help-description" className="text-sm text-muted-foreground">{zh ? '在电脑上的浏览器中导出 HTML 文件，再回到这里上传。' : 'Export an HTML file from your desktop browser, then upload it here.'}</p>
+                    <dl className="space-y-3 text-sm leading-relaxed">
+                      <div><dt className="font-semibold">Chrome</dt><dd className="text-muted-foreground">{zh ? '菜单 ⋮ → 书签和清单 → 书签管理器 → 菜单 ⋮ → 导出书签' : 'Menu ⋮ → Bookmarks and lists → Bookmark Manager → Menu ⋮ → Export bookmarks'}</dd></div>
+                      <div><dt className="font-semibold">Edge</dt><dd className="text-muted-foreground">{zh ? '打开 edge://favorites → 菜单 … → 导出收藏夹' : 'Open edge://favorites → Menu … → Export favorites'}</dd></div>
+                      <div><dt className="font-semibold">Firefox</dt><dd className="text-muted-foreground">{zh ? '书签 → 管理书签 → 导入和备份 → 导出书签到 HTML' : 'Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML'}</dd></div>
+                    </dl>
+                    <div className="flex justify-end"><button type="button" onClick={() => helpDialog.current?.close()} className={`${buttonClass} bg-primary text-primary-foreground hover:opacity-90`}>{zh ? '知道了' : 'Got it'}</button></div>
+                    </div>
+                  </dialog>
+              </div>
+              <input ref={fileInput} type="file" aria-labelledby="link-import-file-label" accept=".html,.htm,text/html" className="sr-only" tabIndex={-1} onChange={event => { const next = event.target.files?.[0]; event.target.value = ''; chooseFile(next); }} />
               <button id="link-import-file" type="button" disabled={busy} style={props.uploadSurfaceStyle} onClick={() => fileInput.current?.click()} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); chooseFile(event.dataTransfer.files[0]); }} className={`group flex min-h-32 w-full min-w-0 flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-5 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-36 ${props.uploadCardClass}`}>
                 <span className={`mb-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors md:h-11 md:w-11 ${props.uploadIconClass}`}>{file ? <Check aria-hidden="true" className="h-5 w-5 md:h-6 md:w-6" /> : <Plus aria-hidden="true" className="h-5 w-5 md:h-6 md:w-6" />}</span>
                 <span className="max-w-full break-all text-sm font-semibold md:text-base">{file?.name || (zh ? '上传书签文件' : 'Upload bookmarks file')}</span>
@@ -151,7 +174,8 @@ export default function LinkImportDialog(props: Props) {
           </form> : <fieldset disabled={busy} className="min-w-0">{props.children}</fieldset>}
           {error && <p role="alert" className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
         </div>
-        <footer className={`shrink-0 px-6 py-6 ${source ? 'mt-4 border-t border-border' : ''}`}>
+        <footer className={`shrink-0 px-4 py-3 sm:px-6 sm:py-4 ${source ? 'border-t border-border' : ''}`}>
+          {source && props.pagination && <fieldset disabled={busy} className="min-w-0">{props.pagination}</fieldset>}
           {props.notice && <div className="mb-3">{props.notice}</div>}
           <div className={completedBatch ? 'grid grid-cols-3 gap-2 sm:flex sm:justify-end sm:gap-3' : 'flex flex-wrap justify-end gap-3'}>
             <button type="button" disabled={busy} onClick={close} className={`${buttonClass} max-sm:px-2 hover:bg-accent/50 ${mutedText}`}><X className="hidden h-4 w-4 shrink-0 sm:block" />{zh ? '取消' : 'Cancel'}</button>

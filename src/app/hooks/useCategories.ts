@@ -12,7 +12,10 @@ export interface LinkItem {
   description: string;
   icon: string;
   faviconUrl?: string;
+  order?: number;
 }
+
+const nextLinkOrder = (items: LinkItem[]) => items.reduce((max, item, index) => Math.max(max, item.order ?? index), -1) + 1;
 
 export interface Category {
   id: string;
@@ -261,6 +264,7 @@ const toCategory = (category: NavCategoryRow, links: NavLinkRow[]): Category => 
       description: link.description ?? '',
       icon: link.icon ?? 'link',
       faviconUrl: link.favicon_url ?? undefined,
+      order: link.order_index ?? 999,
     })),
 });
 
@@ -443,15 +447,13 @@ function useCategoriesState() {
     if (blockPreviewWrite()) return false;
     const previousCategories = categoriesRef.current;
     const linkId = createId();
+    const nextOrder = nextLinkOrder(previousCategories.find(category => category.id === categoryId)?.items ?? []);
     replaceCategories(previousCategories.map((category) => category.id === categoryId
-      ? { ...category, items: [...category.items, { ...item, id: linkId }] }
+      ? { ...category, items: [...category.items, { ...item, id: linkId, order: nextOrder }] }
       : category));
     try {
       const userId = await getCurrentUserId();
       if (!userId) throw new Error('Please sign in before adding a site.');
-
-      const category = previousCategories.find((cat) => cat.id === categoryId);
-      const nextOrder = category?.items.length ?? 999;
 
       const { error: insertError } = await supabase.rpc('create_nav_link', {
         p_link_id: linkId,
@@ -474,6 +476,42 @@ function useCategoriesState() {
     }
   };
 
+  const reorderItems = async (categoryId: string, sourceId: string, targetId: string) => {
+    if (blockPreviewWrite()) return false;
+    const items = categoriesRef.current.find(category => category.id === categoryId)?.items ?? [];
+    const from = items.findIndex(item => item.id === sourceId);
+    const to = items.findIndex(item => item.id === targetId);
+    if (from < 0 || to < 0 || from === to) return false;
+    const sorted = [...items];
+    sorted.splice(to, 0, ...sorted.splice(from, 1));
+    const ranks = new Map(sorted.map((item, index) => [item.id, index]));
+    const changed = sorted.filter((item, index) => item.order !== index);
+    try {
+      const ownerId = await getCurrentUserId();
+      if (!ownerId) return false;
+      // Patch order only: never re-upload card content or recreate rows.
+      for (let offset = 0; offset < changed.length; offset += 8) {
+        const outcomes = await Promise.allSettled(changed.slice(offset, offset + 8).map(async (item) => {
+          const { error: updateError } = await supabase.from('nav_links')
+            .update({ order_index: ranks.get(item.id)! })
+            .eq('owner_id', ownerId).eq('category_id', categoryId).eq('id', item.id)
+            .select('id').single();
+          if (updateError) throw updateError;
+        }));
+        if (outcomes.some(outcome => outcome.status === 'rejected')) throw new Error('Could not save every site position.');
+      }
+      replaceCategories(categoriesRef.current.map(category => category.id !== categoryId ? category : {
+        ...category,
+        items: category.items.map(item => ranks.has(item.id) ? { ...item, order: ranks.get(item.id) } : item)
+          .sort((a, b) => (a.order ?? 999) - (b.order ?? 999)),
+      }));
+      return true;
+    } catch {
+      await fetchCategories({ force: true, showLoading: false });
+      return false;
+    }
+  };
+
   const updateItem = async (categoryId: string, itemId: string, updatedItem: Partial<LinkItem> & { categoryId?: string }) => {
     if (blockPreviewWrite()) return;
     const previousCategories = categoriesRef.current;
@@ -481,8 +519,13 @@ function useCategoriesState() {
     if (!sourceItem) return;
     const targetCategoryId = updatedItem.categoryId ?? categoryId;
     const { categoryId: _targetCategoryId, ...itemPatch } = updatedItem;
-    const nextItem = { ...sourceItem, ...itemPatch };
+    const moved = targetCategoryId !== categoryId;
+    const targetOrder = moved ? nextLinkOrder(previousCategories.find(category => category.id === targetCategoryId)?.items ?? []) : sourceItem.order;
+    const nextItem = { ...sourceItem, ...itemPatch, order: targetOrder };
     replaceCategories(previousCategories.map((category) => {
+      if (!moved) return category.id === categoryId
+        ? { ...category, items: category.items.map(item => item.id === itemId ? nextItem : item) }
+        : category;
       const withoutSource = category.id === categoryId
         ? category.items.filter((item) => item.id !== itemId)
         : category.items;
@@ -491,7 +534,7 @@ function useCategoriesState() {
         : { ...category, items: withoutSource };
     }));
     try {
-      const patch: Record<string, string | null> = {
+      const patch: Record<string, string | number | null> = {
         updated_at: new Date().toISOString(),
       };
 
@@ -501,6 +544,7 @@ function useCategoriesState() {
       if (updatedItem.icon !== undefined) patch.icon = updatedItem.icon;
       if (updatedItem.faviconUrl !== undefined) patch.favicon_url = updatedItem.faviconUrl || null;
       if (updatedItem.categoryId !== undefined) patch.category_id = updatedItem.categoryId;
+      if (moved && targetOrder !== undefined) patch.order_index = targetOrder;
 
       const { error: updateError } = await supabase
         .from('nav_links')
@@ -789,7 +833,7 @@ function useCategoriesState() {
       const userId = await getCurrentUserId();
       if (!userId) throw new Error('Please sign in before importing links.');
       const snapshot = categoriesRef.current;
-      const orders = new Map(snapshot.map(category => [category.id, category.items.length]));
+      const orders = new Map(snapshot.map(category => [category.id, nextLinkOrder(category.items)]));
       const rows = groups.flatMap(({categoryId, links}) => links.map((item) => {
         if (!orders.has(categoryId)) throw new Error('The target category no longer exists.');
         const nextOrder = orders.get(categoryId)!;
@@ -813,7 +857,7 @@ function useCategoriesState() {
       const addedByCategory = new Map<string, LinkItem[]>();
       for (const row of rows) {
         const added = addedByCategory.get(row.category_id) ?? [];
-        added.push({ id: row.id, name: row.name, url: row.url, description: row.description, icon: row.icon, faviconUrl: row.favicon_url ?? undefined });
+        added.push({ id: row.id, name: row.name, url: row.url, description: row.description, icon: row.icon, faviconUrl: row.favicon_url ?? undefined, order: row.order_index });
         addedByCategory.set(row.category_id, added);
       }
       replaceCategories(categoriesRef.current.map((category) => addedByCategory.has(category.id)
@@ -877,6 +921,7 @@ function useCategoriesState() {
     loading,
     error,
     addItem,
+    reorderItems,
     updateItem,
     deleteItem,
     deleteCategory,
