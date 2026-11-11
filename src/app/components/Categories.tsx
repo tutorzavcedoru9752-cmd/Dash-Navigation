@@ -2,7 +2,7 @@ import { useState, useEffect, useContext, useRef, type CSSProperties, type Point
 import { Link as RouterLink } from 'react-router';
 import { BookOpen, Sparkles, Plus, Edit2, Trash2, Copy, Save, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Settings, Library, GraduationCap, Microscope, BrainCircuit, Rocket, MessageSquare, Bookmark, Video, Link, Code, Terminal, Cloud, Database, Globe, Palette, Music, Camera, Gamepad2, UtensilsCrossed, Coffee, ShoppingCart, Plane, Car, Dumbbell, Eye, EyeOff, Mail, Share2, Download, Check, KeyRound, Clock3, UserRound, RefreshCw } from 'lucide-react';
 import { fetchFaviconData, useCategories, type LinkItem, type NavShare } from '../hooks/useCategories';
-import { motion } from 'motion/react';
+import { animate, motion, useMotionValue, useReducedMotion } from 'motion/react';
 import { AuthContext, FREE_CATEGORY_LIMIT, FREE_LINK_LIMIT, LangContext, MembershipContext, ThemeContext, WallpaperContext } from '../App';
 import { PreviewContext } from '../preview';
 import { CUSTOM_WALLPAPER_ID, DEFAULT_WALLPAPER_ID, clampCardOpacity, getWallpaperById } from '../wallpapers';
@@ -11,7 +11,7 @@ import { readUiDraft, removeUiDraft, UI_DRAFT_SCOPES, writeUiDraft } from '../li
 import LinkImportDialog from './LinkImportDialog';
 import { MAX_BOOKMARK_IMPORT, bookmarkUrlKey, resolveBookmarkFavicons, type BrowserBookmark } from '../lib/bookmarks';
 import { NavigationSkeleton } from './NavigationSkeleton';
-import { GripVertical } from 'lucide-react';
+import { CircleAlert, GripVertical, Search } from 'lucide-react';
 
 const ui = {
   en: {
@@ -350,13 +350,14 @@ function CategorySelect({
   );
 }
 
-function OperationToast({ toast, inline = false }: { toast: { status: 'saving' | 'done' | 'error'; msg: string } | null; inline?: boolean }) {
+function OperationToast({ toast }: { toast: { status: 'saving' | 'done' | 'error'; msg: string } | null }) {
   if (!toast) return null;
-  return <div role={toast.status === 'error' ? 'alert' : 'status'} className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium shadow-lg pointer-events-none ${inline ? 'w-full' : 'fixed bottom-6 right-6 z-50 max-w-[calc(100vw-3rem)]'} ${
+  const Icon = toast.status === 'saving' ? RefreshCw : toast.status === 'error' ? CircleAlert : Check;
+  return <div role={toast.status === 'error' ? 'alert' : 'status'} className={`pointer-events-none fixed bottom-6 right-6 z-[60] flex max-w-[min(26rem,calc(100vw-3rem))] items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium shadow-lg ${
     toast.status === 'error' ? 'border-red-100 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300'
       : toast.status === 'done' ? 'border-gray-200 bg-white text-green-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-green-400'
         : 'border-gray-200 bg-white text-gray-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-400'
-  }`}>{toast.status === 'saving' ? <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <Check className="h-3.5 w-3.5 shrink-0" />}<span className="min-w-0 break-words">{toast.msg}</span></div>;
+  }`}><Icon aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 ${toast.status === 'saving' ? 'motion-safe:animate-spin' : ''}`} /><span className="min-w-0 break-words">{toast.msg}</span></div>;
 }
 
 type CategoryEditorDraft = {
@@ -408,8 +409,11 @@ export default function Categories() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredDraftOwnerRef = useRef<string | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
-  const siteDrag = useRef<{ id: string; pointer: number; x: number; y: number; target: string | null } | null>(null);
-  const [siteDropTarget, setSiteDropTarget] = useState<string | null>(null);
+  const siteDrag = useRef<{ id: string; pointer: number; x: number; y: number; moved: boolean; target: string | null } | null>(null);
+  const [draggedSiteId, setDraggedSiteId] = useState<string | null>(null);
+  const dragX = useMotionValue(0);
+  const dragY = useMotionValue(0);
+  const reduceMotion = useReducedMotion();
   const sortingSites = useRef(false);
   const [siteOrderBusy, setSiteOrderBusy] = useState(false);
   const [isSharingCategory, setIsSharingCategory] = useState(false);
@@ -426,6 +430,8 @@ export default function Categories() {
   const [importPageSize, setImportPageSize] = useState(1);
   const [importGrid, setImportGrid] = useState<HTMLDivElement | null>(null);
   const [importFilter, setImportFilter] = useState('');
+  const [importSearchOpen, setImportSearchOpen] = useState(false);
+  const importSearchButton = useRef<HTMLButtonElement>(null);
   const filteredImportLinks = loadedShare?.links.filter(item => `${item.name} ${item.url} ${item.description}`.toLocaleLowerCase().includes(importFilter.toLocaleLowerCase())) ?? [];
   const importPageCount = Math.max(1, Math.ceil(filteredImportLinks.length / importPageSize));
   const currentImportPage = Math.min(importPage, importPageCount - 1);
@@ -520,13 +526,16 @@ export default function Categories() {
   const formFieldClass = hasWallpaper
     ? `${useDarkGlassSurface ? 'bg-white/10 text-white placeholder:text-white/55 focus:ring-white/30' : 'bg-white/55 text-gray-900 placeholder:text-gray-600 focus:ring-gray-400/70'} border border-white/35 shadow-sm`
     : 'bg-gray-100 dark:bg-zinc-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-gray-300 dark:focus:ring-zinc-600';
-  const siteFieldClass = `${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-all`;
+  const siteFieldClass = `${formFieldClass} w-full rounded-lg p-3 text-base outline-none transition-colors motion-reduce:transition-none ${
+    hasWallpaper && useDarkGlassSurface ? 'focus:bg-white/15' : hasWallpaper ? 'focus:bg-white/65' : 'focus:bg-gray-50 dark:focus:bg-zinc-600'
+  }`;
   const modalItemClass = hasWallpaper
     ? `${useDarkGlassSurface ? 'border-white/20 bg-white/8 hover:bg-white/14' : 'border-white/40 bg-white/35 hover:bg-white/55'}`
     : 'border-gray-200 bg-white hover:border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500';
   const modalLabelClass = hasWallpaper
     ? useDarkGlassSurface ? 'text-white/80' : 'text-gray-700'
     : 'text-gray-700 dark:text-gray-300';
+  const cardActionClass = 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none';
 
   useEffect(() => {
     const body = importGrid?.closest<HTMLElement>('[data-import-body]');
@@ -962,7 +971,15 @@ export default function Categories() {
     setImportNewCategory({ id: '', title: '', description: '' });
     setImportPage(0);
     setImportFilter('');
+    setImportSearchOpen(false);
     setIsChoosingImport(true);
+  };
+
+  const closeImportSearch = () => {
+    setImportSearchOpen(false);
+    setImportFilter('');
+    setImportPage(0);
+    importSearchButton.current?.focus();
   };
 
   const handleLoadShareCode = async (code: string) => {
@@ -1122,15 +1139,36 @@ export default function Categories() {
   const trackSiteDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const drag = siteDrag.current;
     if (!drag || drag.pointer !== event.pointerId) return;
-    const moved = Math.hypot(event.clientX - drag.x, event.clientY - drag.y) >= 5;
-    const target = moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-site-id]')?.dataset.siteId : null;
-    drag.target = target && target !== drag.id ? target : null;
-    setSiteDropTarget(drag.target);
+    const x = event.clientX - drag.x;
+    const y = event.clientY - drag.y;
+    if (!drag.moved && Math.hypot(x, y) < 5) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      setDraggedSiteId(drag.id);
+    }
+    dragX.set(x);
+    dragY.set(y);
+    const target = document.elementsFromPoint(event.clientX, event.clientY)
+      .map(element => element.closest<HTMLElement>('[data-site-id]'))
+      .find(card => card && card.dataset.siteId !== drag.id);
+    drag.target = target?.dataset.siteId ?? null;
   };
 
-  const clearSiteDrag = () => {
+  const finishSiteDrag = (target: string | null = null) => {
+    const drag = siteDrag.current;
+    if (!drag) return;
     siteDrag.current = null;
-    setSiteDropTarget(null);
+    if (target) void saveSiteOrder(drag.id, target);
+    if (!drag.moved || reduceMotion) {
+      dragX.jump(0);
+      dragY.jump(0);
+      setDraggedSiteId(null);
+      return;
+    }
+    const settle = { duration: 0.2, ease: 'easeOut' as const };
+    void Promise.all([animate(dragX, 0, settle), animate(dragY, 0, settle)]).then(() => {
+      if (!siteDrag.current) setDraggedSiteId(null);
+    });
   };
 
   const moveCategoryUp = async (index: number) => {
@@ -1339,16 +1377,17 @@ export default function Categories() {
             {selectedCategory?.items.map((item, index) => (
               <motion.div
                 key={item.id}
-                initial={{ opacity: 0, scale: 0.9 }}
+                layout={reduceMotion ? false : 'position'}
+                initial={reduceMotion ? false : { opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.4 + index * 0.05, duration: 0.3 }}
-                whileHover={{ scale: 1.02, y: -3 }}
-                whileTap={{ scale: 0.98 }}
+                transition={{ delay: 0.4 + index * 0.05, duration: 0.3, layout: { duration: 0.2, ease: 'easeOut' } }}
+                whileHover={reduceMotion || draggedSiteId ? undefined : { scale: 1.02, y: -3 }}
+                whileTap={reduceMotion ? undefined : { scale: 0.98 }}
                 data-card
                 data-site-id={item.id}
                 onClick={() => setActiveCardId(item.id)}
-                style={glassSurfaceStyle}
-                className={`group box-border flex min-h-[136px] cursor-pointer flex-col justify-between rounded-xl border p-3 transition-all duration-200 md:min-h-[200px] md:p-5 ${glassBorderClass} ${glassHoverClass} ${siteDropTarget === item.id ? 'ring-2 ring-primary' : ''}`}
+                style={draggedSiteId === item.id ? { ...glassSurfaceStyle, borderColor: 'transparent', x: dragX, y: dragY } : glassSurfaceStyle}
+                className={`group box-border flex min-h-[136px] cursor-pointer flex-col justify-between rounded-xl border p-3 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none md:min-h-[200px] md:p-5 ${glassBorderClass} ${glassHoverClass} ${draggedSiteId === item.id ? 'relative z-10 shadow-xl' : ''}`}
               >
                 <div>
                   <div className="flex justify-between items-start mb-2 md:mb-3">
@@ -1359,6 +1398,7 @@ export default function Categories() {
                     }`}>
                       <SiteFavicon item={item} showFavicon={showFavicons} />
                     </div>
+                    <div className={`ml-auto flex gap-0.5 transition-opacity motion-reduce:transition-none [@media(hover:none)]:opacity-100 ${activeCardId === item.id || draggedSiteId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}>
                     {selectedCategory.items.length > 1 && <button
                       type="button"
                       disabled={siteOrderBusy}
@@ -1366,20 +1406,22 @@ export default function Categories() {
                       title={lang === 'zh' ? '拖拽排序 · 方向键也可移动' : 'Drag to reorder · Arrow keys also work'}
                       onClick={event => event.stopPropagation()}
                       onPointerDown={event => {
+                        event.stopPropagation();
                         if (event.button !== 0 || !event.isPrimary) return;
-                        siteDrag.current = { id: item.id, pointer: event.pointerId, x: event.clientX, y: event.clientY, target: null };
+                        dragX.jump(0);
+                        dragY.jump(0);
+                        setDraggedSiteId(null);
+                        siteDrag.current = { id: item.id, pointer: event.pointerId, x: event.clientX, y: event.clientY, moved: false, target: null };
                         event.currentTarget.setPointerCapture(event.pointerId);
                       }}
                       onPointerMove={trackSiteDrag}
                       onPointerUp={event => {
                         if (siteDrag.current?.pointer !== event.pointerId) return;
                         trackSiteDrag(event);
-                        const target = siteDrag.current.target;
-                        clearSiteDrag();
-                        if (target) void saveSiteOrder(item.id, target);
+                        finishSiteDrag(siteDrag.current.target);
                       }}
-                      onPointerCancel={clearSiteDrag}
-                      onLostPointerCapture={clearSiteDrag}
+                      onPointerCancel={() => finishSiteDrag()}
+                      onLostPointerCapture={() => finishSiteDrag()}
                       onKeyDown={event => {
                         const direction = ['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : ['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : 0;
                         if (!direction) return;
@@ -1387,12 +1429,11 @@ export default function Categories() {
                         const target = selectedCategory.items[index + direction];
                         if (target) void saveSiteOrder(item.id, target.id);
                       }}
-                      className="ml-auto flex h-8 w-6 shrink-0 touch-none items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 enabled:cursor-grab sm:w-7"
-                    ><GripVertical aria-hidden="true" className="h-4 w-4" /></button>}
-                    <div className={`flex gap-0.5 transition-opacity ${activeCardId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}>
+                      className={`${cardActionClass} ${cardSecondaryTextClass} touch-none enabled:cursor-grab active:cursor-grabbing disabled:opacity-50 ${draggedSiteId === item.id ? 'bg-accent/60' : ''}`}
+                    ><GripVertical aria-hidden="true" className="h-3.5 w-3.5" /></button>}
                       <button
                         onClick={() => startEdit(item)}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-md transition-colors text-gray-700 dark:text-gray-300"
+                        className={`${cardActionClass} ${cardSecondaryTextClass}`}
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
@@ -1402,7 +1443,7 @@ export default function Categories() {
                             handleDeleteItem(item.id);
                           }
                         }}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-md transition-colors text-red-600 dark:text-red-400"
+                        className={`${cardActionClass} text-destructive`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1829,7 +1870,6 @@ export default function Categories() {
                 <span>{currentImportPage + 1} / {importPageCount}</span>
                 <button type="button" aria-label={lang === 'zh' ? '下一页' : 'Next'} title={lang === 'zh' ? '下一页' : 'Next'} disabled={currentImportPage + 1 >= importPageCount} onClick={() => setImportPage(currentImportPage + 1)} className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"><ChevronRight aria-hidden="true" className="h-5 w-5" /></button>
               </div> : null}
-      notice={toast ? <OperationToast toast={toast} inline /> : null}
     >
           {loadedShare && (
             <div className="space-y-4 sm:space-y-5">
@@ -1915,10 +1955,18 @@ export default function Categories() {
               </div>}
 
               {loadedShare.links.length > 0 && <div className="space-y-3">
-                <input aria-label={lang === 'zh' ? '筛选导入网址' : 'Filter import sites'} placeholder={lang === 'zh' ? '搜索网站名称或网址' : 'Search site names or URLs'} value={importFilter} onChange={event => { setImportFilter(event.target.value); setImportPage(0); }} className={siteFieldClass} />
-                <div className="flex justify-end gap-4 text-sm">
+                <div className="flex flex-wrap items-center justify-end gap-x-2 text-sm sm:gap-x-4">
+                  <button ref={importSearchButton} type="button" aria-label={lang === 'zh' ? '筛选导入网址' : 'Filter import sites'} aria-expanded={importSearchOpen} aria-controls="import-site-search" onClick={() => importSearchOpen ? closeImportSearch() : setImportSearchOpen(true)} className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none ${importSearchOpen ? 'bg-accent/60' : ''}`}><Search aria-hidden="true" className="h-4 w-4" /></button>
                   <button type="button" className="min-h-9 rounded px-2 text-xs font-semibold hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setImportSelectedIds(current => new Set([...current, ...filteredImportLinks.map(item => item.id)]))}>{lang === 'zh' ? '全选' : 'Select all'}</button>
                   <button type="button" className="min-h-9 rounded px-2 text-xs font-semibold hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setImportSelectedIds(new Set())}>{lang === 'zh' ? '清空选择' : 'Clear selection'}</button>
+                </div>
+                <div id="import-site-search" hidden={!importSearchOpen}>
+                  {importSearchOpen && <input autoFocus type="search" aria-label={lang === 'zh' ? '搜索网站名称或网址' : 'Search site names or URLs'} placeholder={lang === 'zh' ? '搜索网站名称或网址' : 'Search site names or URLs'} value={importFilter} onChange={event => { setImportFilter(event.target.value); setImportPage(0); }} onKeyDown={event => {
+                    if (event.key !== 'Escape') return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeImportSearch();
+                  }} className={siteFieldClass} />}
                 </div>
               </div>}
 
@@ -1963,7 +2011,7 @@ export default function Categories() {
     </LinkImportDialog>}
 
     {/* Operation status toast */}
-    {!isChoosingImport && <OperationToast toast={toast} />}
+    <OperationToast toast={toast} />
 
     {/* 页脚 */}
     <footer className={`relative z-10 mt-auto border-t transition-colors duration-200 ${

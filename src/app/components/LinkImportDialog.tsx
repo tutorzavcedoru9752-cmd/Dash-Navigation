@@ -20,7 +20,6 @@ type Props = {
   onImport: (keepOpen: boolean) => Promise<boolean>;
   selectedCount: number;
   children: ReactNode;
-  notice?: ReactNode;
   pagination?: ReactNode;
 };
 
@@ -129,9 +128,9 @@ export default function LinkImportDialog(props: Props) {
 
   const close = () => { if (!busy) props.onClose(); };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-4 pb-28">
       <button type="button" tabIndex={-1} aria-label={zh ? '关闭导入窗口' : 'Close import dialog'} disabled={busy} onClick={close} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <section ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="link-import-title" aria-busy={busy} style={{ ...props.surfaceStyle, colorScheme: props.darkSurface || isDark ? 'dark' : 'light' }} className={`relative flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-2xl border shadow-2xl outline-none ${source ? 'h-[min(90dvh,52rem)]' : ''} ${props.surfaceClass} ${primaryText}`}>
+      <section ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="link-import-title" aria-busy={busy} style={{ ...props.surfaceStyle, colorScheme: props.darkSurface || isDark ? 'dark' : 'light' }} className={`relative flex max-h-full w-full max-w-2xl flex-col rounded-2xl border shadow-2xl outline-none ${source ? 'h-[min(90dvh,52rem)]' : ''} ${props.surfaceClass} ${primaryText}`}>
         <header className="flex shrink-0 items-center gap-2 p-4 sm:p-6">
           <Download className="h-5 w-5 shrink-0" />
           <h2 id="link-import-title" className="text-lg font-semibold">{zh ? '导入网址' : 'Import links'}</h2>
@@ -145,7 +144,7 @@ export default function LinkImportDialog(props: Props) {
             <div className="space-y-1.5">
               <div className="flex items-center gap-1">
                 <span id="link-import-file-label" className={`px-1 text-xs font-semibold uppercase tracking-wide ${props.labelClass}`}>{zh ? '浏览器收藏夹' : 'Browser bookmarks'}</span>
-                    <button ref={helpButton} type="button" disabled={busy} aria-haspopup="dialog" aria-label={zh ? '如何导出书签' : 'How to export bookmarks'} onClick={() => helpDialog.current?.showModal()} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <button ref={helpButton} type="button" disabled={busy} aria-haspopup="dialog" aria-label={zh ? '如何导出书签' : 'How to export bookmarks'} onClick={() => helpDialog.current?.showModal()} className={`ml-auto inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none ${props.labelClass}`}>
                       <CircleHelp aria-hidden="true" className="h-4 w-4" />
                     </button>
                   <dialog ref={helpDialog} aria-labelledby="bookmark-help-title" aria-describedby="bookmark-help-description" onClose={() => helpButton.current?.focus()} onClick={event => {
@@ -176,7 +175,6 @@ export default function LinkImportDialog(props: Props) {
         </div>
         <footer className={`shrink-0 px-4 py-3 sm:px-6 sm:py-4 ${source ? 'border-t border-border' : ''}`}>
           {source && props.pagination && <fieldset disabled={busy} className="min-w-0">{props.pagination}</fieldset>}
-          {props.notice && <div className="mb-3">{props.notice}</div>}
           <div className={completedBatch ? 'grid grid-cols-3 gap-2 sm:flex sm:justify-end sm:gap-3' : 'flex flex-wrap justify-end gap-3'}>
             <button type="button" disabled={busy} onClick={close} className={`${buttonClass} max-sm:px-2 hover:bg-accent/50 ${mutedText}`}><X className="hidden h-4 w-4 shrink-0 sm:block" />{zh ? '取消' : 'Cancel'}</button>
             <button type="button" disabled={busy || (source ? !props.selectedCount : !file && !shareCode.trim())} onClick={() => void advance()} className={`${buttonClass} max-sm:px-2 ${completedBatch ? `border border-border hover:bg-accent/50 ${mutedText}` : props.primaryClass}`}>

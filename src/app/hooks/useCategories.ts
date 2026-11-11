@@ -300,6 +300,8 @@ function useCategoriesState() {
   const categoriesRef = useRef(categories);
   const currentUserIdRef = useRef<string | null>(null);
   const lastSyncAtRef = useRef(0);
+  // Odd revisions are in-flight writes. Reads started before or during them may contain stale ranks.
+  const orderWriteRevision = useRef(0);
 
   useEffect(() => {
     categoriesRef.current = categories;
@@ -309,7 +311,7 @@ function useCategoriesState() {
     categoriesRef.current = nextCategories;
     setCategories(nextCategories);
     const userId = currentUserIdRef.current;
-    if (persist && userId) {
+    if (persist && userId && orderWriteRevision.current % 2 === 0) {
       const updatedAt = Date.now();
       lastSyncAtRef.current = updatedAt;
       void writeNavigationCache({ userId, categories: nextCategories, updatedAt });
@@ -353,6 +355,7 @@ function useCategoriesState() {
         return;
       }
 
+      const orderRevision = orderWriteRevision.current;
       const [categoriesResult, linksResult] = await Promise.all([
         supabase
           .from('nav_categories')
@@ -366,6 +369,7 @@ function useCategoriesState() {
           .order('name', { ascending: true }),
       ]);
 
+      if (orderRevision % 2 !== 0 || orderRevision !== orderWriteRevision.current) return;
       if (categoriesResult.error) throw categoriesResult.error;
       if (linksResult.error) throw linksResult.error;
 
@@ -478,6 +482,8 @@ function useCategoriesState() {
 
   const reorderItems = async (categoryId: string, sourceId: string, targetId: string) => {
     if (blockPreviewWrite()) return false;
+    const userId = currentUserIdRef.current;
+    if (!userId || orderWriteRevision.current % 2 !== 0) return false;
     const items = categoriesRef.current.find(category => category.id === categoryId)?.items ?? [];
     const from = items.findIndex(item => item.id === sourceId);
     const to = items.findIndex(item => item.id === targetId);
@@ -486,9 +492,14 @@ function useCategoriesState() {
     sorted.splice(to, 0, ...sorted.splice(from, 1));
     const ranks = new Map(sorted.map((item, index) => [item.id, index]));
     const changed = sorted.filter((item, index) => item.order !== index);
+    orderWriteRevision.current += 1;
+    replaceCategories(categoriesRef.current.map(category => category.id === categoryId
+      ? { ...category, items: sorted.map((item, order) => ({ ...item, order })) }
+      : category), false);
+
     try {
       const ownerId = await getCurrentUserId();
-      if (!ownerId) return false;
+      if (ownerId !== userId) throw new Error('Account changed while saving site order.');
       // Patch order only: never re-upload card content or recreate rows.
       for (let offset = 0; offset < changed.length; offset += 8) {
         const outcomes = await Promise.allSettled(changed.slice(offset, offset + 8).map(async (item) => {
@@ -500,14 +511,24 @@ function useCategoriesState() {
         }));
         if (outcomes.some(outcome => outcome.status === 'rejected')) throw new Error('Could not save every site position.');
       }
-      replaceCategories(categoriesRef.current.map(category => category.id !== categoryId ? category : {
-        ...category,
-        items: category.items.map(item => ranks.has(item.id) ? { ...item, order: ranks.get(item.id) } : item)
-          .sort((a, b) => (a.order ?? 999) - (b.order ?? 999)),
-      }));
+      orderWriteRevision.current += 1;
+      if (currentUserIdRef.current === userId) replaceCategories(categoriesRef.current);
       return true;
     } catch {
-      await fetchCategories({ force: true, showLoading: false });
+      orderWriteRevision.current += 1;
+      if (currentUserIdRef.current === userId) {
+        const previousPositions = new Map(items.map((item, index) => [item.id, { order: item.order, index }]));
+        replaceCategories(categoriesRef.current.map(category => {
+          if (category.id !== categoryId) return category;
+          const restoredItems = category.items.map(item => {
+            const previous = previousPositions.get(item.id);
+            return previous ? { ...item, order: previous.order } : item;
+          });
+          restoredItems.sort((a, b) => (previousPositions.get(a.id)?.index ?? items.length) - (previousPositions.get(b.id)?.index ?? items.length));
+          return { ...category, items: restoredItems };
+        }), false);
+        await fetchCategories({ force: true, showLoading: false });
+      }
       return false;
     }
   };
